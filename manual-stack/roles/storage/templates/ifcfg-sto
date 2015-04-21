@@ -1,0 +1,9 @@
+DEVICE="{{stoif}}"
+TYPE=Ethernet
+ONBOOT="yes"
+#IPV6INIT=no
+#IPV6_AUTOCONF=no
+BOOTPROTO=static
+IPADDR="{{stoip}}"
+NETMASK="{{stomask}}"
+NM_CONTROLLED=no

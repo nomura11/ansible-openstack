@@ -1,0 +1,157 @@
+#!/bin/bash
+
+export LANG=C
+
+ntpserver=
+waitsync=false
+. $1
+
+logfile=/tmp/ansible_ntp.log
+
+######################################################################
+# For ansible
+#
+
+# redirect anything to logfile but ansible response
+exec 3>>/dev/stdout >> $logfile 2>&1
+
+changed=false
+failed=false
+rc=0
+exit_ansible() {
+	local x
+	if [ "$1" != "" ]; then
+		rc=$1
+	fi
+	if [ "$rc" != "0" ]; then
+		failed=true
+	fi
+	if [ ! -z "$msg" ]; then
+		x=", \"msg\": \"$msg\""
+	fi
+	echo "{ \"rc\": $rc, \"changed\": $changed, \"failed\": $failed $x }" >&3
+	exit $rc
+}
+
+is_true() {
+	local var=$1
+
+	if [ -z "$var" ]; then
+		return 1
+	fi
+	if [ "$var" = "0" ]; then
+		return 1
+	fi
+	if (echo "$var" | grep -qi "^\(false\|no\)$"); then
+		return 1
+	fi
+
+	return 0
+}
+
+######################################################################
+# 
+#
+
+use_chrony=false
+if [ -e /etc/chrony.conf ]; then
+	echo "Using chronyd"
+	file=/etc/chrony.conf
+	service=chronyd
+	use_chrony=true
+elif [ -e /etc/ntp.conf ]; then
+	file=/etc/ntp.conf
+	service=ntpd
+	if [ -e /etc/init.d/ntp ]; then
+		service=ntp
+	fi
+else
+	echo "Cannot find ntp/chrony"
+	ansible_exit 1
+fi
+
+function is_sync() {
+	if is_true ${use_chrony}; then
+		if (chronyc sources | grep -q '^^\*'); then
+			return 0
+		else
+			return 1
+		fi
+	else
+		if (ntpq -p | grep -q '^\*'); then
+			return 0
+		else
+			return 1
+		fi
+	fi
+}
+
+function wait_sync() {
+	for n in $(seq 30); do
+		if is_sync; then
+			return 0
+		fi
+		echo "Waiting..."
+		sleep 15
+	done
+
+	echo "NTP not sync-ed"
+	failed=true
+	return 1
+}
+
+######################################################################
+# 
+#
+
+if [ -z "$ntpserver" ]; then
+	if is_true "$waitsync"; then
+		wait_sync
+		exit_ansible
+	fi
+	echo "Neither \$ntpserver nor \$waitsync=true defined"
+	exit_ansible 1
+fi
+
+#
+# Configure
+#
+
+if (grep "^server " $file | grep -vq "^server $ntpserver"); then
+	echo "Removing old servers"
+	sed -i 's/^server/#server/' $file
+	changed=true
+fi
+if ! (grep -q "^server $ntpserver\$" $file); then
+	echo "Adding $ntpserver"
+	echo "server $ntpserver" >> $file
+	changed=true
+fi
+if is_true ${use_chrony} && ! grep -q '^allow 0.0.0.0/0' $file; then
+	echo "Allowing client access for chronyd"
+	echo "allow 0.0.0.0/0" >> $file
+	changed=true
+fi
+
+if is_true $changed; then
+	service $service restart
+	if (which chkconfig >& /dev/null); then
+		chkconfig $service on
+	fi
+fi
+
+#
+# Synchronize
+#
+
+if ! is_sync; then
+	service $service stop
+	ntpdate $ntpserver
+	service $service start
+	if is_true "$waitsync"; then
+		wait_sync
+	fi
+fi
+
+exit_ansible
+

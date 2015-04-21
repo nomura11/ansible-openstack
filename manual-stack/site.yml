@@ -1,0 +1,67 @@
+---
+####################################################
+# General Initialization
+
+- name: Common OS setups
+  hosts: all
+  roles:
+    - rdo_base
+
+- name: Naive ntp setup works
+  hosts: all
+  gather_facts: False
+  tasks:
+    - name: install ntp
+      yum: name="{{item}}" state=present
+      with_items:
+        - ntpdate
+        - ntp
+    - name: NTP setup and sync
+      ntp: ntpserver="{{ntp_server}}" waitsync=true
+
+
+####################################################
+#
+- name: Install OpenStack controller
+  gather_facts: False
+  hosts: controller
+  roles:
+    - stack_common
+    - controller
+
+- name: Install OpenStack network nodes
+  gather_facts: False
+  hosts: network
+  roles:
+    - stack_common
+    - network
+
+- name: Install OpenStack compute nodes
+  gather_facts: False
+  hosts: compute
+  roles:
+    - stack_common
+    - compute
+
+- name: Install OpenStack storage nodes
+  gather_facts: False
+  hosts: storage
+  roles:
+    - stack_common
+    - storage
+
+- name: Install OpenStack dashboard
+  gather_facts: False
+  hosts: dashboard
+  roles:
+    - dashboard
+
+####################################################
+#
+- name: Setup OpenStack environment
+  gather_facts: False
+  hosts: stack_deployer
+  roles:
+    - stack_deployer
+
+

@@ -1,0 +1,70 @@
+vm-m1
+vm-n1
+vm-c1
+vm-s1
+
+[all:vars]
+ntp_server = 192.168.1.1
+proxy_server = "http://192.168.1.1:3128/"
+
+#########################################################################33
+# OpenStack cluster
+#
+
+[openstack:children]
+controller
+network
+compute
+storage
+dashboard
+stack_deployer
+
+[controller]
+vm-m1
+
+[network]
+vm-n1 intip=192.168.120.172
+
+[compute]
+vm-c1 intip=192.168.120.173 stoip=192.168.130.173 mngip=192.168.1.173
+
+[storage]
+vm-s1 stoip=192.168.130.174 mngip=192.168.1.174 stopvs="/dev/vdb"
+
+[dashboard]
+vm-m1
+
+[stack_deployer]
+vm-m1
+
+[network:vars]
+intif=eth1
+extif=eth2
+
+[compute:vars]
+intif=eth1
+stoif=eth2
+
+[storage:vars]
+stoif=eth1
+
+[openstack:vars]
+controller_hostname=vm-m1
+controller_ip_addr=192.168.1.171
+intmask=255.255.255.0
+stomask=255.255.255.0
+setup_dir=/root/controller-setup
+admin_pass=rootroot
+demo_pass=demo
+unused_variable=xxxxxxxxxxxxxxxxxxxxxx
+novanet_size=14000
+novanet_bridge=br100
+
+[stack_deployer:vars]
+extnet_start=192.168.110.100
+extnet_end=192.168.110.150
+extnet_gateway=192.168.110.1
+extnet_cidr=192.168.110.0/24
+adminnet_gateway=10.1.1.1
+adminnet_cidr=10.1.1.0/24
+cirros_url=http://download.cirros-cloud.net/0.3.3/cirros-0.3.3-x86_64-disk.img

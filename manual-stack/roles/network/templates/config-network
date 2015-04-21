@@ -1,0 +1,8 @@
+SETUPDIR={{ setup_dir }}
+export CONTROLLER_HOSTNAME={{ controller_hostname }}
+export CONTROLLER_IP_ADDR={{ controller_ip_addr }}
+DBROOTPASS={{ admin_pass }}
+#
+NETWORK_EXTERNAL_IF="{{extif}}"
+NETWORK_TUNNEL_IF="{{intif}}"
+NETWORK_TUNNEL_IF_IP="{{intip}}"

@@ -1,0 +1,23 @@
+---
+- name: Install scripts
+  copy: src="{{item}}" dest=/root/ mode=0755
+  with_items:
+    - netinit.sh
+
+# FIXME: URL may change
+- name: Install EPEL repository
+  yum: name=http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm state=present
+
+- name: Install RDO repository
+  yum: name=https://rdo.fedorapeople.org/rdo-release.rpm state=present
+
+- name: Install openvswitch
+  yum: name=openvswitch state=present
+
+- name: Disabling NetworkManager and start network service
+  shell: sudo /root/netinit.sh
+  args:
+    creates: /root/netinit-done
+
+- name: Install openstack-selinux
+  yum: name=openstack-selinux state=present

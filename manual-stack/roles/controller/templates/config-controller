@@ -1,0 +1,4 @@
+SETUPDIR={{ setup_dir }}
+export CONTROLLER_HOSTNAME={{ controller_hostname }}
+export CONTROLLER_IP_ADDR={{ controller_ip_addr }}
+DBROOTPASS={{ admin_pass }}

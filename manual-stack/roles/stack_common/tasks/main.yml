@@ -1,0 +1,10 @@
+---
+- name: Install common utility scripts for OpenStack
+  copy: src="{{ item }}" dest="{{ setup_dir }}/" owner=root mode=0755
+  with_items:
+    - merge-ini.pl
+    - modify_inifile
+
+- name: Install minimum required packages
+  yum: name=perl state=present
+

@@ -1,0 +1,45 @@
+#!/bin/bash
+
+. $1
+
+changed=false
+failed=false
+rc=0
+
+function exit_ansible() {
+	if [ $rc -ne 0 ]; then
+		failed=true
+	fi
+	echo "{ \"rc\": $rc, \"changed\": $changed, \"failed\": $failed }"
+	exit $rc
+}
+
+if [ -z "$dev" ]; then
+	rc=1
+	exit_ansible
+fi
+
+if [ ! -b "$dev" ]; then
+	basedev=$(echo $dev | sed 's/[0-9]*$//')
+	parted -s $basedev mklabel gpt &&
+	parted -s $basedev mkpart primary 1MB 100%
+	if [ $? -ne 0 ]; then
+		rc=1
+		exit_ansible
+	fi
+	changed=true
+fi
+
+if [ -z "$fstype" ]; then
+	exit_ansible
+fi
+
+current_fs=$(blkid -o value -s TYPE $dev)
+if [ "$fstype" = "$current_fs" ]; then
+	exit_ansible
+fi
+
+mkfs.${fstype} $dev
+rc=$?
+changed=true
+exit_ansible

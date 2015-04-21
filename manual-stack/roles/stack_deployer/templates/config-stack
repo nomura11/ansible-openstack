@@ -1,0 +1,13 @@
+SETUPDIR={{ setup_dir }}
+#
+EXTNET_NAME="ext-net"
+EXTNET_SUBNET="ext-subnet"
+EXTNET_START="{{extnet_start}}"
+EXTNET_END="{{extnet_end}}"
+EXTNET_GW="{{extnet_gateway}}"
+EXTNET_CIDR="{{extnet_cidr}}"
+ADMINNET_NAME="admin-net"
+ADMINNET_SUBNET="admin-subnet"
+ADMINNET_ROUTER="admin-router"
+ADMINNET_GW="{{adminnet_gateway}}"
+ADMINNET_CIDR="{{adminnet_cidr}}"

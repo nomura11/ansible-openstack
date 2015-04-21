@@ -1,0 +1,8 @@
+SETUPDIR={{ setup_dir }}
+export CONTROLLER_HOSTNAME={{ controller_hostname }}
+export CONTROLLER_IP_ADDR={{ controller_ip_addr }}
+#
+MANAGEMENT_IP_ADDR="{{mngip}}"
+COMPUTE_INTERNAL_IF="{{intif}}"
+COMPUTE_INTERNAL_IF_IP="{{intip}}"
+COMPUTE_STORAGE_IF="{{stoif}}"

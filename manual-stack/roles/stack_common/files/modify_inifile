@@ -1,0 +1,35 @@
+#!/bin/bash
+
+#
+# Wrapper script for merge-ini.pl
+#
+
+inifile=$1
+modfile=$2
+origfile=${inifile}.orig
+n=0
+
+if [ ! -e $inifile ]; then
+	echo "$inifile not exist"
+	exit 1
+fi
+if [ ! -e $modfile ]; then
+	echo "$modfile not exist"
+	exit 1
+fi
+if [ -e ${origfile} ]; then
+	for n in $(seq 0 100); do
+		if [ ! -e ${origfile}.${n} ]; then
+			origfile=${origfile}.${n}
+			break
+		fi
+	done
+	if [ -e ${origfile} ]; then
+		echo "Cannot create back up file: $inifile"
+		exit 1
+	fi
+fi
+cp -a ${inifile} ${origfile}
+merge-ini.pl $modfile < ${origfile} > ${inifile}
+diff -u ${origfile} ${inifile}
+

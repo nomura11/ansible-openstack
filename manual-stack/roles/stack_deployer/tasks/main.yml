@@ -1,0 +1,31 @@
+---
+- name: Ensure openrc for stack deployer
+  file: path="{{setup_dir}}/openrc.sh" state=file
+
+- name: Install setup script for stack deployer
+  copy: src="setup-stack.sh" dest="{{setup_dir}}/" owner=root mode=755
+
+- name: Install config files for stack deployer
+  template: src="config-stack" dest="{{setup_dir}}/" owner=root
+
+- name: Generate keypair for admin
+  ssh_keygen: keyfile="/root/.ssh/id_rsa"
+
+#
+# Download images
+#
+
+- name: Get cirros image file
+  get_url: url="{{cirros_url}}" dest="{{setup_dir}}/cirros.img"
+  when: cirros_url is defined
+
+- name: Setup OpenStack by stack deployer
+  command: "{{setup_dir}}/setup-stack.sh {{setup_dir}}/config-stack"
+  register: setup_result
+  ignore_errors: True
+  changed_when: setup_result.rc == 2
+
+- name: Check script error for stack deployer
+  fail: msg="setup failed"
+  when: setup_result.rc != 0 and setup_result.rc != 2
+

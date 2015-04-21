@@ -1,0 +1,29 @@
+---
+- name: Install sysconfig for storage I/F
+  template: src="ifcfg-sto" dest="/etc/sysconfig/network-scripts/ifcfg-{{stoif}}" mode=0644
+
+#######################################################################
+#
+- name: Create setup directory
+  file: path="{{ setup_dir }}" owner=root group=root mode=0755 state=directory
+
+- name: Install setup files
+  copy: src="{{ item }}" dest="{{ setup_dir }}/" owner=root mode=0755
+  with_items:
+    - setup-storage.sh
+
+- name: Install config files
+  template: src="config-storage" dest="{{ setup_dir }}/" owner=root
+
+- name: Install password file for storage
+  template: src=pass.txt dest="{{ setup_dir }}/" owner=root group=root mode=0600
+
+- name: Setup storage
+  command: "{{ setup_dir }}/setup-storage.sh {{ setup_dir }}/config-storage"
+  register: setup_result
+  ignore_errors: True
+  changed_when: setup_result.rc == 2
+
+- name: Check setup script error
+  fail: msg="setup failed"
+  when: setup_result.rc != 0 and setup_result.rc != 2
