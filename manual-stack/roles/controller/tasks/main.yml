@@ -21,7 +21,6 @@
   template: src="{{item}}" dest="{{setup_dir}}/" owner=root group=root mode=0600
   with_items:
     - pass.txt
-    - openrc.sh
     - demorc.sh
 
 - name: Setup controller

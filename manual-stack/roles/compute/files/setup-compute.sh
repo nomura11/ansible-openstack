@@ -53,7 +53,6 @@ fi
 
 # -------------------------------------------------------------
 PWDFILE=${SETUPDIR}/pass.txt
-#OPENRC=${SETUPDIR}/openrc.sh
 export PATH=${SETUPDIR}:$PATH
 
 donefile="${SETUPDIR}/compute.done"
