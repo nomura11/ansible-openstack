@@ -435,16 +435,24 @@ rm -f /var/lib/cinder/cinder.sqlite
 
 yum install -q -y mongodb-server mongodb || exit 1
 
+if [ -e /etc/mongodb.conf ]; then
+	mongoconf=/etc/mongodb.conf
+elif [ -e /etc/mongod.conf ]; then
+	mongoconf=/etc/mongod.conf
+else
+	exit 1
+fi
+
 # Edit /etc/mongodb.conf
 # bind_ip = 10.0.0.11
-sed -i "s/^bind_ip *=.*\$/bind_ip = ${CONTROLLER_IP_ADDR}/" /etc/mongodb.conf
+sed -i "s/^bind_ip *=.*\$/bind_ip = ${CONTROLLER_IP_ADDR}/" $mongoconf
 
 # By default, MongoDB creates several 1 GB journal files in the
 # /var/lib/mongodb/journal directory. If you want to reduce the size
 # of each journal file to 128 MB and limit total journal space consumption
 # to 512 MB, assert the smallfiles key:
-if ! (grep -q '^smallfiles.*=.*true' /etc/mongodb.conf); then
-	echo "smallfiles = true" >> /etc/mongodb.conf
+if ! (grep -q '^smallfiles.*=.*true' $mongoconf); then
+	echo "smallfiles = true" >> $mongoconf
 fi
 
 systemctl enable mongod.service
