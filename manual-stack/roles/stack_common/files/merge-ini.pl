@@ -16,12 +16,16 @@ while (<MODFILE>) {
 		next;
 	} elsif (/^\[([^\]]*)\]/) { # section header
 		$cursec = $1;
-		$configs{$cursec} = [];
+		if (not $configs{$cursec}) {
+			$configs{$cursec} = [];
+		}
 		next;
 	}
 	elsif (/^([a-zA-Z0-9:_-]+)\s*=\s*(.*)$/) { # key-value
 		chomp($2);
 		push(@{$configs{$cursec}}, [$1,$2]);
+	} elsif (/^\.\.\./) { # skip '...'
+		next;
 	} else { # comments, etc.
 		push(@{$configs{$cursec}}, [$_]);
 	}
