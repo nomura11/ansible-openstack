@@ -107,20 +107,29 @@ yum install -q -y openstack-cinder targetcli python-oslo-db MySQL-python || exit
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf
 [database]
 connection = mysql://cinder:${CINDER_DBPASS}@${CONTROLLER_HOSTNAME}/cinder
+...
 [DEFAULT]
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
+...
+[DEFAULT]
 auth_strategy = keystone
-my_ip = ${MANAGEMENT_IP_ADDR}
-glance_host = ${CONTROLLER_HOSTNAME}
-iscsi_helper = lioadm
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
 admin_tenant_name = service
 admin_user = cinder
 admin_password = ${CINDER_PASS}
+...
+[DEFAULT]
+my_ip = ${MANAGEMENT_IP_ADDR}
+...
+[DEFAULT]
+glance_host = ${CONTROLLER_HOSTNAME}
+...
+[DEFAULT]
+iscsi_helper = lioadm
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf
 
@@ -147,10 +156,11 @@ systemctl start openstack-cinder-volume.service target.service
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf.ceilometer
 [DEFAULT]
 control_exchange = cinder
-notification_driver = cinder.openstack.common.notifier.rpc_notifier
+notification_driver = messagingv2
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf.ceilometer
 systemctl restart openstack-cinder-volume.service
 
+# -------------------------------------------------------------
 touch $donefile
 exit 0

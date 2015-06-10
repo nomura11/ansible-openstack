@@ -99,16 +99,20 @@ cat <<EOF | tee ${SETUPDIR}/mod-net-neutron.conf
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
+...
+[DEFAULT]
 auth_strategy = keystone
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
 admin_tenant_name = service
 admin_user = neutron
 admin_password = ${NEUTRON_PASS}
+...
+[DEFAULT]
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-net-neutron.conf
 
@@ -120,18 +124,23 @@ cat <<EOF | tee ${SETUPDIR}/mod-net-ml2_conf.ini
 type_drivers = flat,gre
 tenant_network_types = gre
 mechanism_drivers = openvswitch
+...
 [ml2_type_flat]
 flat_networks = external
+...
 [ml2_type_gre]
 tunnel_id_ranges = 1:1000
+...
 [securitygroup]
 enable_security_group = True
 enable_ipset = True
 firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+...
 [ovs]
 local_ip = ${NETWORK_TUNNEL_IF_IP}
 enable_tunneling = True
 bridge_mappings = external:br-ex
+...
 [agent]
 tunnel_types = gre
 EOF
@@ -189,7 +198,11 @@ auth_region = regionOne
 admin_tenant_name = service
 admin_user = neutron
 admin_password = ${NEUTRON_PASS}
+...
+[DEFAULT]
 nova_metadata_ip = ${CONTROLLER_HOSTNAME}
+...
+[DEFAULT]
 metadata_proxy_shared_secret = ${NEUTRON_SHARED_SECRET}
 EOF
 modify_inifile /etc/neutron/metadata_agent.ini ${SETUPDIR}/mod-net-metadata_agent.ini
@@ -220,5 +233,6 @@ systemctl enable neutron-openvswitch-agent.service neutron-l3-agent.service \
 systemctl start neutron-openvswitch-agent.service neutron-l3-agent.service \
   neutron-dhcp-agent.service neutron-metadata-agent.service
 
+# -------------------------------------------------------------
 touch $donefile
 exit 0

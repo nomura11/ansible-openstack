@@ -188,14 +188,19 @@ yum install -q -y openstack-keystone python-keystoneclient || exit 1
 cat <<EOF | tee ${SETUPDIR}/mod-keystone.conf
 [DEFAULT]
 admin_token = ${ADMIN_TOKEN}
-log_dir = /var/log/keystone
+...
 [database]
 connection = mysql://keystone:${KEYSTONE_DBPASS}@${CONTROLLER_HOSTNAME}/keystone
+...
 [token]
 provider = keystone.token.providers.uuid.Provider
 driver = keystone.token.persistence.backends.sql.Token
+...
 [revoke]
 driver = keystone.contrib.revoke.backends.sql.Revoke
+...
+[DEFAULT]
+log_dir = /var/log/keystone
 EOF
 modify_inifile /etc/keystone/keystone.conf ${SETUPDIR}/mod-keystone.conf
 keystone-manage pki_setup --keystone-user keystone --keystone-group keystone
@@ -276,18 +281,9 @@ service_create ${SETUPDIR}/service-def-glance.sh
 
 yum install -q -y openstack-glance python-glanceclient || exit 1
 cat <<EOF | tee ${SETUPDIR}/mod-glance.conf
-[DEFAULT]
-rpc_backend = rabbit
-rabbit_host = ${CONTROLLER_HOSTNAME}
-rabbit_password = ${RABBIT_PASS}
-notification_driver = noop
 [database]
 connection = mysql://glance:${GLANCE_DBPASS}@${CONTROLLER_HOSTNAME}/glance
-EOF
-modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance.conf
-modify_inifile /etc/glance/glance-registry.conf ${SETUPDIR}/mod-glance.conf
-
-cat <<EOF | tee ${SETUPDIR}/mod-glance-auth.conf
+...
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
@@ -296,16 +292,19 @@ admin_user = glance
 admin_password = ${GLANCE_PASS}
 [paste_deploy]
 flavor = keystone
+...
+[DEFAULT]
+notification_driver = noop
 EOF
-modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance-auth.conf
-modify_inifile /etc/glance/glance-registry.conf ${SETUPDIR}/mod-glance-auth.conf
+modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance.conf
+modify_inifile /etc/glance/glance-registry.conf ${SETUPDIR}/mod-glance.conf
 
 cat <<EOF | tee ${SETUPDIR}/mod-glance-store.conf
 [glance_store]
 default_store = file
 filesystem_store_datadir = /var/lib/glance/images/
 EOF
-modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance-auth.conf
+modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance-store.conf
 
 su -s /bin/sh -c "glance-manage db_sync" glance
 
@@ -333,26 +332,35 @@ yum install -q -y openstack-nova-api \
 	python-novaclient || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-nova.conf
+[database]
+connection = mysql://nova:${NOVA_DBPASS}@${CONTROLLER_HOSTNAME}/nova
+...
 [DEFAULT]
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
-my_ip=${CONTROLLER_IP_ADDR}
-vncserver_listen=${CONTROLLER_IP_ADDR}
-vncserver_proxyclient_address=${CONTROLLER_IP_ADDR}
-auth_strategy=keystone
-[database]
-connection = mysql://nova:${NOVA_DBPASS}@${CONTROLLER_HOSTNAME}/nova
+...
+[DEFAULT]
+auth_strategy = keystone
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
 admin_tenant_name = service
 admin_user = nova
 admin_password = ${NOVA_PASS}
-[osapi_v3]
-enabled = True
+...
+[DEFAULT]
+my_ip = ${CONTROLLER_IP_ADDR}
+...
+[DEFAULT]
+vncserver_listen = ${CONTROLLER_IP_ADDR}
+vncserver_proxyclient_address = ${CONTROLLER_IP_ADDR}
+...
 [glance]
 host = ${CONTROLLER_HOSTNAME}
+...
+[osapi_v3]
+enabled = True
 EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf
 
@@ -400,22 +408,25 @@ service_create ${SETUPDIR}/service-def-cinder-v2.sh
 yum install -q -y openstack-cinder python-cinderclient python-oslo-db || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-cinder.conf
+[database]
+connection = mysql://cinder:${CINDER_DBPASS}@${CONTROLLER_HOSTNAME}/cinder
+...
 [DEFAULT]
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
-#rabbit_port = 5672
-#rabbit_userid = guest
 rabbit_password = ${RABBIT_PASS}
+...
+[DEFAULT]
 auth_strategy = keystone
-my_ip = ${CONTROLLER_IP_ADDR}
-[database]
-connection = mysql://cinder:${CINDER_DBPASS}@${CONTROLLER_HOSTNAME}/cinder
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name=service
-admin_user=cinder
-admin_password=${CINDER_PASS}
+admin_tenant_name = service
+admin_user = cinder
+admin_password = ${CINDER_PASS}
+...
+[DEFAULT]
+my_ip = ${CONTROLLER_IP_ADDR}
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-cinder.conf
 
@@ -472,26 +483,34 @@ yum install -q -y openstack-ceilometer-api openstack-ceilometer-collector \
   openstack-ceilometer-alarm python-ceilometerclient || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-ceilometer.conf
-[DEFAULT]
-rabbit_host = ${CONTROLLER_HOSTNAME}
-rabbit_password = ${RABBIT_PASS}
-log_dir = /var/log/ceilometer
-auth_strategy = keystone
 [database]
 connection = mongodb://ceilometer:${CEILOMETER_DBPASS}@${CONTROLLER_HOSTNAME}:27017/ceilometer
-[publisher]
-metering_secret = ${CEILOMETER_SHARED_SECRET}
+...
+[DEFAULT]
+rpc_backend = rabbit
+rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_password = ${RABBIT_PASS}
+...
+[DEFAULT]
+auth_strategy = keystone
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
 admin_tenant_name = service
 admin_user = ceilometer
 admin_password = ${CEILOMETER_PASS}
+...
 [service_credentials]
 os_auth_url = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 os_username = ceilometer
 os_tenant_name = service
 os_password = ${CEILOMETER_PASS}
+...
+[publisher]
+metering_secret = ${CEILOMETER_SHARED_SECRET}
+...
+[DEFAULT]
+log_dir = /var/log/ceilometer
 EOF
 modify_inifile /etc/ceilometer/ceilometer.conf ${SETUPDIR}/mod-ceilometer.conf
 
@@ -511,7 +530,7 @@ systemctl start  openstack-ceilometer-api.service \
 # Glance
 cat <<EOF | tee ${SETUPDIR}/mod-glance.conf.ceilometer
 [DEFAULT]
-notification_driver = messaging
+notification_driver = messagingv2
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
@@ -523,7 +542,7 @@ systemctl restart openstack-glance-api.service openstack-glance-registry.service
 cat <<EOF | tee ${SETUPDIR}/mod-cinder.conf.ceilometer
 [DEFAULT]
 control_exchange = cinder
-notification_driver = cinder.openstack.common.notifier.rpc_notifier
+notification_driver = messagingv2
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-cinder.conf.ceilometer
 systemctl restart openstack-cinder-api.service openstack-cinder-scheduler.service
@@ -543,14 +562,29 @@ yum install -q -y openstack-neutron openstack-neutron-ml2 python-neutronclient w
 
 service_tenant_id=$(keystone tenant-get service | awk '$2 == "id" { print $4 }')
 cat <<EOF | tee ${SETUPDIR}/mod-neutron.conf
+[database]
+connection = mysql://neutron:${NEUTRON_DBPASS}@${CONTROLLER_HOSTNAME}/neutron
+...
 [DEFAULT]
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
+...
+[DEFAULT]
 auth_strategy = keystone
+[keystone_authtoken]
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
+identity_uri = http://${CONTROLLER_HOSTNAME}:35357
+admin_tenant_name = service
+admin_user = neutron
+admin_password = ${NEUTRON_PASS}
+...
+[DEFAULT]
 core_plugin = ml2
 service_plugins = router
 allow_overlapping_ips = True
+...
+[DEFAULT]
 notify_nova_on_port_status_changes = True
 notify_nova_on_port_data_changes = True
 nova_url = http://${CONTROLLER_HOSTNAME}:8774/v2
@@ -559,16 +593,6 @@ nova_region_name = regionOne
 nova_admin_username = nova
 nova_admin_tenant_id = ${service_tenant_id}
 nova_admin_password = ${NOVA_PASS}
-#control_exchange = neutron
-#notification_driver = neutron.openstack.common.notifier.rabbit_notifier
-[keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = neutron
-admin_password = ${NEUTRON_PASS}
-[database]
-connection = mysql://neutron:${NEUTRON_DBPASS}@${CONTROLLER_HOSTNAME}/neutron
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-neutron.conf
 
@@ -580,8 +604,10 @@ cat <<EOF | tee ${SETUPDIR}/mod-ml2.conf.neutron
 type_drivers = flat,gre
 tenant_network_types = gre
 mechanism_drivers = openvswitch
+...
 [ml2_type_gre]
 tunnel_id_ranges = 1:1000
+...
 [securitygroup]
 enable_security_group = True
 enable_ipset = True
@@ -594,17 +620,20 @@ modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-ml2.conf.ne
 #
 cat <<EOF | tee ${SETUPDIR}/mod-nova.conf.neutron
 [DEFAULT]
-network_api_class=nova.network.neutronv2.api.API
-security_group_api=neutron
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
 linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-firewall_driver=nova.virt.firewall.NoopFirewallDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+...
 [neutron]
-url=http://${CONTROLLER_HOSTNAME}:9696
-auth_strategy=keystone
-admin_auth_url=http://${CONTROLLER_HOSTNAME}:35357/v2.0
-admin_tenant_name=service
-admin_username=neutron
-admin_password=${NEUTRON_PASS}
+url = http://${CONTROLLER_HOSTNAME}:9696
+auth_strategy = keystone
+admin_auth_url = http://${CONTROLLER_HOSTNAME}:35357/v2.0
+admin_tenant_name = service
+admin_username = neutron
+admin_password = ${NEUTRON_PASS}
+...
+[neutron]
 service_metadata_proxy = True
 metadata_proxy_shared_secret = ${NEUTRON_SHARED_SECRET}
 EOF
@@ -621,5 +650,53 @@ systemctl restart openstack-nova-api.service openstack-nova-scheduler.service \
 systemctl enable neutron-server.service
 systemctl start neutron-server.service
 
+# -------------------------------------------------------------
+#
+# Heat
+#
+
+create_database heat ${HEAT_DBPASS}
+service_create ${SETUPDIR}/service-def-heat.sh
+service_create ${SETUPDIR}/service-def-heat-cfn.sh
+
+keystone role-create --name heat_stack_owner
+keystone role-create --name heat_stack_user
+#
+keystone user-role-add --user demo --tenant demo --role heat_stack_owner
+
+yum install -q -y openstack-heat-api openstack-heat-api-cfn openstack-heat-engine python-heatclient || exit 1
+
+cat <<EOF | tee ${SETUPDIR}/mod-heat.conf
+[database]
+connection = mysql://heat:${HEAT_DBPASS}@${CONTROLLER_HOSTNAME}/heat
+...
+[DEFAULT]
+rpc_backend = rabbit
+rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_password = ${RABBIT_PASS}
+...
+[keystone_authtoken]
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
+identity_uri = http://${CONTROLLER_HOSTNAME}:35357
+admin_tenant_name = service
+admin_user = heat
+admin_password = ${HEAT_PASS}
+[ec2authtoken]
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
+...
+[DEFAULT]
+heat_metadata_server_url = http://${CONTROLLER_HOSTNAME}:8000
+heat_waitcondition_server_url = http://${CONTROLLER_HOSTNAME}:8000/v1/waitcondition
+EOF
+modify_inifile /etc/heat/heat.conf ${SETUPDIR}/mod-heat.conf
+
+su -s /bin/sh -c "heat-manage db_sync" heat
+
+systemctl enable openstack-heat-api.service openstack-heat-api-cfn.service \
+  openstack-heat-engine.service
+systemctl start openstack-heat-api.service openstack-heat-api-cfn.service \
+  openstack-heat-engine.service
+
+# -------------------------------------------------------------
 touch $donefile
 exit 0

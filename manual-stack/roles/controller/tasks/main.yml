@@ -13,6 +13,8 @@
     - service-def-cinder-v2.sh
     - service-def-ceilometer.sh
     - service-def-neutron.sh
+    - service-def-heat.sh
+    - service-def-heat-cfn.sh
 
 - name: Install config files for controller
   template: src=config-controller dest="{{setup_dir}}/" owner=root group=root mode=0600
