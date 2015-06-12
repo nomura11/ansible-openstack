@@ -84,7 +84,7 @@ rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
-auth_strategy=keystone
+auth_strategy = keystone
 [keystone_authtoken]
 auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 identity_uri = http://${CONTROLLER_HOSTNAME}:35357
@@ -277,16 +277,16 @@ yum install -q -y nova-network nova-api-metadata vlan || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-comp-nova.conf.network
 [DEFAULT]
-network_api_class=nova.network.api.API
-security_group_api=nova
-firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
-network_size=${NOVA_NETWORK_SIZE}
-allow_same_net_traffic=False
-multi_host=True
-send_arp_for_ha=True
-share_dhcp_address=True
-force_dhcp_release=True
-public_interface=${NETWORK_EXTERNAL_IF}
+network_api_class = nova.network.api.API
+security_group_api = nova
+firewall_driver = nova.virt.libvirt.firewall.IptablesFirewallDriver
+network_size = ${NOVA_NETWORK_SIZE}
+allow_same_net_traffic = False
+multi_host = True
+send_arp_for_ha = True
+share_dhcp_address = True
+force_dhcp_release = True
+public_interface = ${NETWORK_EXTERNAL_IF}
 EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-comp-nova.conf.network
 
@@ -294,7 +294,7 @@ if [ "${NOVA_NETWORK_VLAN_START}" ]; then
 	# Vlan + multihost
 	cat <<EOF | tee ${SETUPDIR}/mod-comp-nova.conf.network.vlan
 [DEFAULT]
-network_manager=nova.network.manager.VlanManager
+network_manager = nova.network.manager.VlanManager
 vlan_interface=${NETWORK_TUNNEL_IF}
 vlan_start=${NOVA_NETWORK_VLAN_START}
 EOF
@@ -303,7 +303,7 @@ else
 	# FlatDHCP + multihost
 	cat <<EOF | tee ${SETUPDIR}/mod-comp-nova.conf.network.flatdhcp
 [DEFAULT]
-network_manager=nova.network.manager.FlatDHCPManager
+network_manager = nova.network.manager.FlatDHCPManager
 flat_network_bridge=${NOVA_NETWORK_FLAT_BRIDGE}
 flat_interface=${NETWORK_TUNNEL_IF}
 EOF
