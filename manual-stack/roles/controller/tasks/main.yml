@@ -6,6 +6,18 @@
   copy: src="{{item}}" dest="{{setup_dir}}/" owner=root mode=0755
   with_items:
     - setup-controller.sh
+    - setup-functions
+    - setup-rcfiles.sh
+    - setup-clients.sh
+    - setup-dbserver.sh
+    - setup-rabbitmq-server.sh
+    - setup-ceilometer-server.sh
+    - setup-cinder-server.sh
+    - setup-glance-server.sh
+    - setup-heat-server.sh
+    - setup-keystone-server.sh
+    - setup-neutron-server.sh
+    - setup-nova-server.sh
     - service-def-keystone.sh
     - service-def-nova.sh
     - service-def-glance.sh

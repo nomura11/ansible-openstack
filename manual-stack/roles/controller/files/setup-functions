@@ -1,0 +1,94 @@
+#!/bin/bash
+
+function create_database {
+	local name=$1
+	local pass=$2
+
+	if [ "$name" = "" ] || [ "$pass" = "" ]; then
+		echo "No username/password given."
+		exit 1
+	fi
+	if [ -z "$DBROOTPASS" ]; then
+		echo "DBROOTPASS not defined"
+		exit 1
+	fi
+
+	cat <<EOF | tee >(mysql --user=root --password=${DBROOTPASS})
+CREATE DATABASE ${name};
+GRANT ALL PRIVILEGES ON ${name}.* TO '${name}'@'localhost' IDENTIFIED BY '${pass}';
+GRANT ALL PRIVILEGES ON ${name}.* TO '${name}'@'%' IDENTIFIED BY '${pass}';
+EOF
+}
+
+function service_create {
+	local config=$1
+
+	if [ -z "$config" ] || [ ! -e $config ]; then
+		echo "configfile: $config not exist"
+		exit 1
+	fi
+	echo "Reading config file: $config"
+	. $config
+
+	# Check openrc
+	if [ -z "$OS_PASSWORD" ]; then
+		echo "OS_PASSWORD is empty. Missing openrc file?"
+	fi
+	if [ "$OS_USERNAME" != "admin" ]; then
+		echo "OS_USERNAME is not 'admin' Missing openrc file?"
+		exit 1
+	fi
+
+	# Check variables
+	if [ -z "$SERVICE_NAME" ]; then
+		echo "configfile: SERVICE_NAME not defined"
+	fi
+	if [ -z "$SERVICE_PASS" ]; then
+		echo "configfile: SERVICE_PASS not defined (this might be ok)"
+	fi
+	if [ -z "$SERVICE_EMAIL" ]; then
+		echo "configfile: SERVICE_EMAIL not defined (this is fine)"
+	fi
+	if [ -z "$SERVICE_TYPE" ]; then
+		echo "configfile: SERVICE_TYPE not defined"
+	fi
+	if [ -z "$SERVICE_DESCRIPTION" ]; then
+		echo "configfile: SERVICE_DESCRIPTION not defined"
+	fi
+	if [ -z "$SERVICE_URL_PUBLIC" ]; then
+		echo "configfile: SERVICE_URL_PUBLIC not defined"
+	fi
+	if [ -z "$SERVICE_URL_INTERNAL" ]; then
+		echo "configfile: SERVICE_URL_INTERNAL not defined"
+	fi
+	if [ -z "$SERVICE_URL_ADMIN" ]; then
+		echo "configfile: SERVICE_URL_ADMIN not defined"
+	fi
+
+	# Create service account
+	if [ "$SERVICE_EMAIL" ]; then
+		keystone user-create --name=${SERVICE_NAME} --pass=${SERVICE_PASS} --email=${SERVICE_EMAIL}
+		keystone user-role-add --user=${SERVICE_NAME} --tenant=service --role=admin
+		keystone user-get ${SERVICE_NAME}
+	fi
+
+	# Create service
+	keystone service-create --name=${SERVICE_NAME} --type=${SERVICE_TYPE} --description="${SERVICE_DESCRIPTION}"
+	SID=$(keystone service-list | awk "\$4 == \"${SERVICE_NAME}\" {print \$2}")
+	if [ -z "$SID" ]; then
+		echo "Service ID cannot determined"
+		exit 1
+	fi
+	keystone endpoint-create --service-id=${SID} --publicurl=${SERVICE_URL_PUBLIC} --internalurl=${SERVICE_URL_INTERNAL} --adminurl=${SERVICE_URL_ADMIN}
+
+	keystone service-get ${SERVICE_NAME}
+	if [ $? -ne 0 ]; then
+		echo "Failed to create service: $SERVICE_NAME"
+		exit 1
+	fi
+
+	#
+	keystone user-list
+	keystone service-list
+	keystone endpoint-list
+}
