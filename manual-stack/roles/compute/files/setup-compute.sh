@@ -43,12 +43,12 @@ fi
 
 if [ -z "$COMPUTE_STORAGE_IF" ]; then
 	echo "COMPUTE_STORAGE_IF not defined"
-	exit 1
-fi
-ifup "$COMPUTE_STORAGE_IF"
-if [ $? -ne 0 ]; then
-	echo "Failed to activate ${COMPUTE_STORAGE_IF}"
-	exit 1
+else
+	ifup "$COMPUTE_STORAGE_IF"
+	if [ $? -ne 0 ]; then
+		echo "Failed to activate ${COMPUTE_STORAGE_IF}"
+		exit 1
+	fi
 fi
 
 # -------------------------------------------------------------
