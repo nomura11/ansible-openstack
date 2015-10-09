@@ -71,38 +71,72 @@ fi
 #
 
 create_database keystone ${KEYSTONE_DBPASS}
-yum install -q -y openstack-keystone python-keystoneclient || exit 1
+yum install -q -y openstack-keystone python-openstackclient memcached python-memcached || exit 1
+
+systemctl enable memcached.service
+systemctl start memcached.service
+
 cat <<EOF | tee ${SETUPDIR}/mod-keystone.conf
 [DEFAULT]
 admin_token = ${ADMIN_TOKEN}
-...
+log_dir = /var/log/keystone
 [database]
 connection = mysql://keystone:${KEYSTONE_DBPASS}@${CONTROLLER_HOSTNAME}/keystone
-...
+[memcache]
+servers = localhost:11211
 [token]
 provider = keystone.token.providers.uuid.Provider
-driver = keystone.token.persistence.backends.sql.Token
-...
+driver = keystone.token.persistence.backends.memcache.Token
 [revoke]
 driver = keystone.contrib.revoke.backends.sql.Revoke
-...
-[DEFAULT]
-log_dir = /var/log/keystone
 EOF
 modify_inifile /etc/keystone/keystone.conf ${SETUPDIR}/mod-keystone.conf
-keystone-manage pki_setup --keystone-user keystone --keystone-group keystone
-chown -R keystone:keystone /var/log/keystone
-chown -R keystone:keystone /etc/keystone/ssl
-chmod -R o-rwx /etc/keystone/ssl
+
 su -s /bin/sh -c "keystone-manage db_sync" keystone
+
+KEYSTONE_USE_WSGI=yes
+if [ -n "${KEYSTONE_USE_WSGI}" ]; then
+yum install -q -y httpd mod_wsgi || exit 1
+cat <<EOF > /etc/httpd/conf.d/wsgi-keystone.conf
+Listen 5000
+Listen 35357
+
+<VirtualHost *:5000>
+    WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
+    WSGIProcessGroup keystone-public
+    WSGIScriptAlias / /var/www/cgi-bin/keystone/main
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIPassAuthorization On
+    LogLevel info
+    ErrorLogFormat "%{cu}t %M"
+    ErrorLog /var/log/httpd/keystone-error.log
+    CustomLog /var/log/httpd/keystone-access.log combined
+</VirtualHost>
+
+<VirtualHost *:35357>
+    WSGIDaemonProcess keystone-admin processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
+    WSGIProcessGroup keystone-admin
+    WSGIScriptAlias / /var/www/cgi-bin/keystone/admin
+    WSGIApplicationGroup %{GLOBAL}
+    WSGIPassAuthorization On
+    LogLevel info
+    ErrorLogFormat "%{cu}t %M"
+    ErrorLog /var/log/httpd/keystone-error.log
+    CustomLog /var/log/httpd/keystone-access.log combined
+</VirtualHost>
+EOF
+mkdir -p /var/www/cgi-bin/keystone
+#curl http://git.openstack.org/cgit/openstack/keystone/plain/httpd/keystone.py?h=stable/kilo \
+cat ${SETUPDIR}/keystone-main \
+  | tee /var/www/cgi-bin/keystone/main /var/www/cgi-bin/keystone/admin
+chown -R keystone:keystone /var/www/cgi-bin/keystone
+chmod 755 /var/www/cgi-bin/keystone/*
+systemctl enable httpd.service
+systemctl start httpd.service
+else
 systemctl enable openstack-keystone.service
 systemctl start openstack-keystone.service
-# FIXME: why
-sleep 5
-rm -f /var/lib/keystone/keystone.db
-
-(crontab -l -u keystone 2>&1 | grep -q token_flush) || \
- echo '@hourly /usr/bin/keystone-manage token_flush >/var/log/keystone/keystone-tokenflush.log 2>&1' >> /var/spool/cron/keystone
+fi
 
 #
 # - Create tenants, users, and roles
@@ -110,47 +144,49 @@ rm -f /var/lib/keystone/keystone.db
 # - Verify operation
 #
 
-export OS_SERVICE_TOKEN=${ADMIN_TOKEN}
-export OS_SERVICE_ENDPOINT=http://${CONTROLLER_HOSTNAME}:35357/v2.0
+export OS_TOKEN=${ADMIN_TOKEN}
+export OS_URL=http://${CONTROLLER_HOSTNAME}:35357/v2.0
+
+# Endpoints
+service_create ${SETUPDIR}/service-def-keystone.sh
 
 # Admin
-keystone tenant-create --name=admin --description="Admin Tenant"
-if ! (keystone tenant-list | grep admin); then
+openstack project create --description "Admin Project" admin
+if ! (openstack project list | grep admin); then
 	echo "Failed to create tenant: admin"
 	exit 1
 fi
-keystone user-create --name=admin --pass=$ADMIN_PASS --email=admin@localhost
-keystone role-create --name=admin
-keystone user-role-add --user=admin --tenant=admin --role=admin
-keystone user-role-add --user=admin --tenant=admin --role=_member_
+openstack user create --password $ADMIN_PASS --email admin@localhost admin
+openstack role create admin
+openstack role add --project admin --user admin admin
 
 # Demo
-keystone tenant-create --name=demo --description="Demo Tenant"
-if ! (keystone tenant-list | grep demo); then
+openstack project create --description "Demo Project" demo
+if ! (openstack project list | grep demo); then
 	echo "Failed to create tenant: demo"
 	exit 1
 fi
-keystone user-create --name=demo --tenant=demo --pass=$DEMO_PASS --email=demo@localhost
+openstack user create --password $DEMO_PASS --email demo@localhost demo
+openstack role create user
+openstack role add --project demo --user demo user
 
 # Service
-keystone tenant-create --name=service --description="Service Tenant"
-if ! (keystone tenant-list | grep service); then
+openstack project create --description "Service Project" service
+if ! (openstack project list | grep service); then
 	echo "Failed to create tenant: service"
 	exit 1
 fi
 
-# Endpoints
-service_create ${SETUPDIR}/service-def-keystone.sh
-unset OS_SERVICE_ENDPOINT
-unset OS_SERVICE_TOKEN
+unset OS_URL
+unset OS_TOKEN
 
 # Test
-keystone --os-username=admin --os-password=$ADMIN_PASS --os-auth-url=http://${CONTROLLER_HOSTNAME}:35357/v2.0 token-get || exit 1
-keystone --os-username=admin --os-password=$ADMIN_PASS --os-tenant-name=admin --os-auth-url=http://${CONTROLLER_HOSTNAME}:35357/v2.0 token-get || exit 1
-keystone --os-username=demo --os-password=$DEMO_PASS --os-tenant-name=demo --os-auth-url=http://${CONTROLLER_HOSTNAME}:5000/v2.0 token-get || exit 1
+#keystone --os-username=admin --os-password=$ADMIN_PASS --os-auth-url=http://${CONTROLLER_HOSTNAME}:35357/v2.0 token-get || exit 1
+#keystone --os-username=admin --os-password=$ADMIN_PASS --os-tenant-name=admin --os-auth-url=http://${CONTROLLER_HOSTNAME}:35357/v2.0 token-get || exit 1
+#keystone --os-username=demo --os-password=$DEMO_PASS --os-tenant-name=demo --os-auth-url=http://${CONTROLLER_HOSTNAME}:5000/v2.0 token-get || exit 1
 . ${OPENRC}
-keystone token-get || exit 1
-keystone user-list || exit 1
+openstack token issue || exit 1
+openstack user list || exit 1
 
 # -------------------------------------------------------------
 # Done

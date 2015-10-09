@@ -131,16 +131,16 @@ nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
 
 # To create the external network
 neutron net-create ${EXTNET_NAME} \
-	--router:external True \
+	--router:external \
 	--provider:physical_network external \
 	--provider:network_type flat
 
 # To create a subnet on the external network
-neutron subnet-create ${EXTNET_NAME} --name ${EXTNET_SUBNET} \
+neutron subnet-create --name ${EXTNET_SUBNET} \
 	--allocation-pool start=${EXTNET_START},end=${EXTNET_END} \
 	--disable-dhcp \
 	--gateway ${EXTNET_GW} \
-	${EXTNET_CIDR}
+	${EXTNET_NAME} ${EXTNET_CIDR}
 
 #
 # Tenant network
@@ -150,9 +150,9 @@ neutron subnet-create ${EXTNET_NAME} --name ${EXTNET_SUBNET} \
 neutron net-create ${ADMINNET_NAME}
 
 # To create a subnet on the tenant network
-neutron subnet-create ${ADMINNET_NAME} --name ${ADMINNET_SUBNET} \
+neutron subnet-create --name ${ADMINNET_SUBNET} \
 	--gateway ${ADMINNET_GW} \
-	${ADMINNET_CIDR}
+	${ADMINNET_NAME} ${ADMINNET_CIDR}
 
 # To create a router on the tenant network and attach the external and tenant networks to it
 neutron router-create ${ADMINNET_ROUTER}

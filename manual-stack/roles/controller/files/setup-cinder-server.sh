@@ -76,26 +76,38 @@ service_create ${SETUPDIR}/service-def-cinder-v2.sh
 
 yum install -q -y openstack-cinder python-cinderclient python-oslo-db || exit 1
 
+cp /usr/share/cinder/cinder-dist.conf /etc/cinder/cinder.conf
+chown -R cinder:cinder /etc/cinder/cinder.conf
+
 cat <<EOF | tee ${SETUPDIR}/mod-cinder.conf
 [database]
 connection = mysql://cinder:${CINDER_DBPASS}@${CONTROLLER_HOSTNAME}/cinder
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = cinder
-admin_password = ${CINDER_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = cinder
+password=${CINDER_PASS}
 ...
 [DEFAULT]
 my_ip = ${CONTROLLER_IP_ADDR}
+...
+[oslo_concurrency]
+#lock_path = /var/lock/cinder
+lock_path = /var/lib/cinder/tmp
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-cinder.conf
 

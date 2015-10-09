@@ -87,17 +87,22 @@ connection = mysql://nova:${NOVA_DBPASS}@${CONTROLLER_HOSTNAME}/nova
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
-auth_strategy = keystone
+auth_strategy=keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = nova
-admin_password = ${NOVA_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = nova
+password = ${NOVA_PASS}
 ...
 [DEFAULT]
 my_ip = ${CONTROLLER_IP_ADDR}
@@ -108,6 +113,9 @@ vncserver_proxyclient_address = ${CONTROLLER_IP_ADDR}
 ...
 [glance]
 host = ${CONTROLLER_HOSTNAME}
+...
+[oslo_concurrency]
+lock_path = /var/lib/nova/tmp
 ...
 [osapi_v3]
 enabled = True

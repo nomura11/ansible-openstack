@@ -43,6 +43,7 @@ if [ -e $config ] && [ ! -e $orig ] && cp -a $config $orig; then
 	cat $orig | \
 	sed "s/^OPENSTACK_HOST = .*/OPENSTACK_HOST = \"${CONTROLLER_HOSTNAME}\"/" | \
 	sed "s/^ALLOWED_HOSTS = .*/ALLOWED_HOSTS = ['*']/" | \
+	sed 's/^\(OPENSTACK_KEYSTONE_DEFAULT_ROLE\) = .*/\1 = "user"/' | \
 	sed "s/'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'/'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',\n		'LOCATION': '127.0.0.1:11211'/" > $config
 	diff -u $orig $config
 fi

@@ -79,11 +79,14 @@ cat <<EOF | tee ${SETUPDIR}/mod-glance.conf
 connection = mysql://glance:${GLANCE_DBPASS}@${CONTROLLER_HOSTNAME}/glance
 ...
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = glance
-admin_password = ${GLANCE_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = glance
+password = ${GLANCE_PASS}
 [paste_deploy]
 flavor = keystone
 ...
@@ -104,10 +107,6 @@ su -s /bin/sh -c "glance-manage db_sync" glance
 
 systemctl enable openstack-glance-api.service openstack-glance-registry.service
 systemctl start openstack-glance-api.service openstack-glance-registry.service
-
-# FIXME: why
-sleep 5
-rm -f /var/lib/glance/glance.sqlite
 
 # -------------------------------------------------------------
 # Done

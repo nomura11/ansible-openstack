@@ -77,6 +77,7 @@ if [ -e /etc/mongodb.conf ]; then
 elif [ -e /etc/mongod.conf ]; then
 	mongoconf=/etc/mongod.conf
 else
+	echo "Could not find mongodb conf"
 	exit 1
 fi
 
@@ -98,7 +99,7 @@ systemctl start mongod.service
 sleep 3
 mongo --host ${CONTROLLER_HOSTNAME} --eval "
 db = db.getSiblingDB(\"ceilometer\");
-db.addUser({user: \"ceilometer\",
+db.createUser({user: \"ceilometer\",
             pwd: \"${CEILOMETER_DBPASS}\",
             roles: [ \"readWrite\", \"dbAdmin\" ]})"
 
@@ -114,7 +115,9 @@ connection = mongodb://ceilometer:${CEILOMETER_DBPASS}@${CONTROLLER_HOSTNAME}:27
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
@@ -130,10 +133,12 @@ admin_password = ${CEILOMETER_PASS}
 os_auth_url = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 os_username = ceilometer
 os_tenant_name = service
+os_endpoint_type = internalURL
 os_password = ${CEILOMETER_PASS}
+os_region_name = RegionOne
 ...
 [publisher]
-metering_secret = ${CEILOMETER_SHARED_SECRET}
+telemetry_secret = ${CEILOMETER_SHARED_SECRET}
 ...
 [DEFAULT]
 log_dir = /var/log/ceilometer
@@ -159,6 +164,7 @@ cat <<EOF | tee ${SETUPDIR}/mod-glance.conf.ceilometer
 notification_driver = messagingv2
 rpc_backend = rabbit
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 EOF
 modify_inifile /etc/glance/glance-api.conf ${SETUPDIR}/mod-glance.conf.ceilometer

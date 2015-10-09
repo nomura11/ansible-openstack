@@ -53,7 +53,9 @@ fi
 yum install -q -y rabbitmq-server || exit 1
 systemctl enable rabbitmq-server.service
 systemctl start rabbitmq-server.service
-rabbitmqctl change_password guest $RABBIT_PASS
+#rabbitmqctl change_password guest $RABBIT_PASS
+rabbitmqctl add_user openstack $RABBIT_PASS
+rabbitmqctl set_permissions openstack ".*" ".*" ".*"
 
 # -------------------------------------------------------------
 # Done

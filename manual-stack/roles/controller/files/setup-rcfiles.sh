@@ -75,10 +75,14 @@ fi
 # openrc
 #
 cat <<EOF | tee ${OPENRC}
+export OS_PROJECT_DOMAIN_ID=default
+export OS_USER_DOMAIN_ID=default
+export OS_PROJECT_NAME=admin
+export OS_TENANT_NAME=admin
 export OS_USERNAME=admin
 export OS_PASSWORD=${ADMIN_PASS}
-export OS_TENANT_NAME=admin
-export OS_AUTH_URL=http://${CONTROLLER_HOSTNAME}:35357/v2.0
+export OS_AUTH_URL=http://${CONTROLLER_HOSTNAME}:35357/v3
+export OS_VOLUME_API_VERSION=2
 EOF
 . ${OPENRC}
 if [ -z "${OS_PASSWORD}" -o "${OS_PASSWORD}" != "${ADMIN_PASS}" ]; then

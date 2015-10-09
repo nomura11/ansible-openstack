@@ -80,17 +80,22 @@ yum install -q -y openstack-nova-compute sysfsutils || exit 1
 cat <<EOF | tee ${SETUPDIR}/mod-comp-nova.conf
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = nova
-admin_password = ${NOVA_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = nova
+password = ${NOVA_PASS}
 ...
 [DEFAULT]
 my_ip = ${MANAGEMENT_IP_ADDR}
@@ -103,6 +108,9 @@ novncproxy_base_url = http://${CONTROLLER_IP_ADDR}:6080/vnc_auto.html
 ...
 [glance]
 host = ${CONTROLLER_HOSTNAME}
+...
+[oslo_concurrency]
+lock_path = /var/lib/nova/tmp
 ...
 [osapi_v3]
 enabled = True
@@ -141,13 +149,15 @@ fi
 cat <<EOF >> /etc/sysctl.conf
 net.ipv4.conf.all.rp_filter=0
 net.ipv4.conf.default.rp_filter=0
+net.bridge.bridge-nf-call-iptables=1
+net.bridge.bridge-nf-call-ip6tables=1
 EOF
 sysctl -p
 
 #
 # To install the Networking components
 #
-yum install -q -y openstack-neutron-ml2 openstack-neutron-openvswitch || exit 1
+yum install -q -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch || exit 1
 
 #
 # To configure the Networking common components
@@ -155,17 +165,22 @@ yum install -q -y openstack-neutron-ml2 openstack-neutron-openvswitch || exit 1
 cat <<EOF | tee ${SETUPDIR}/mod-comp-neutron.conf
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0/
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = neutron
-admin_password = ${NEUTRON_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 ...
 [DEFAULT]
 core_plugin = ml2
@@ -179,7 +194,7 @@ modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-comp-neutron.conf
 #
 cat <<EOF | tee ${SETUPDIR}/mod-comp-ml2_conf.ini
 [ml2]
-type_drivers = flat,gre
+type_drivers = flat,vlan,gre,vxlan
 tenant_network_types = gre
 mechanism_drivers = openvswitch
 ...
@@ -193,7 +208,6 @@ firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewal
 ...
 [ovs]
 local_ip = ${COMPUTE_INTERNAL_IF_IP}
-enable_tunneling = True
 ...
 [agent]
 tunnel_types = gre
@@ -332,11 +346,13 @@ yum install -q -y openstack-ceilometer-compute python-ceilometerclient python-pe
 
 cat <<EOF | tee ${SETUPDIR}/mod-comp-ceilometer.conf
 [publisher]
-metering_secret = ${CEILOMETER_SHARED_SECRET}
+telemetry_secret = ${CEILOMETER_SHARED_SECRET}
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [keystone_authtoken]
@@ -352,7 +368,7 @@ os_username = ceilometer
 os_tenant_name = service
 os_password = ${CEILOMETER_PASS}
 os_endpoint_type = internalURL
-os_region_name = regionOne
+os_region_name = RegionOne
 ...
 [DEFAULT]
 log_dir = /var/log/ceilometer

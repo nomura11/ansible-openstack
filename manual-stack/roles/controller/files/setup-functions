@@ -67,28 +67,31 @@ function service_create {
 
 	# Create service account
 	if [ "$SERVICE_EMAIL" ]; then
-		keystone user-create --name=${SERVICE_NAME} --pass=${SERVICE_PASS} --email=${SERVICE_EMAIL}
-		keystone user-role-add --user=${SERVICE_NAME} --tenant=service --role=admin
-		keystone user-get ${SERVICE_NAME}
+		openstack user create --password ${SERVICE_PASS} ${SERVICE_NAME}
+		openstack role add --project service --user ${SERVICE_NAME} admin
+		openstack user show ${SERVICE_NAME}
 	fi
 
 	# Create service
-	keystone service-create --name=${SERVICE_NAME} --type=${SERVICE_TYPE} --description="${SERVICE_DESCRIPTION}"
-	SID=$(keystone service-list | awk "\$4 == \"${SERVICE_NAME}\" {print \$2}")
-	if [ -z "$SID" ]; then
-		echo "Service ID cannot determined"
-		exit 1
-	fi
-	keystone endpoint-create --service-id=${SID} --publicurl=${SERVICE_URL_PUBLIC} --internalurl=${SERVICE_URL_INTERNAL} --adminurl=${SERVICE_URL_ADMIN}
+	openstack service create \
+		--name ${SERVICE_NAME} \
+		--description "${SERVICE_DESCRIPTION}" \
+		${SERVICE_TYPE}
+	openstack endpoint create \
+		--publicurl ${SERVICE_URL_PUBLIC} \
+		--internalurl ${SERVICE_URL_INTERNAL} \
+		--adminurl ${SERVICE_URL_ADMIN} \
+		--region RegionOne \
+		${SERVICE_TYPE}
 
-	keystone service-get ${SERVICE_NAME}
+	openstack service show ${SERVICE_NAME}
 	if [ $? -ne 0 ]; then
 		echo "Failed to create service: $SERVICE_NAME"
 		exit 1
 	fi
 
 	#
-	keystone user-list
-	keystone service-list
-	keystone endpoint-list
+	openstack user list
+	openstack service list
+	openstack endpoint list
 }

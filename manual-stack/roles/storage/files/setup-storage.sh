@@ -92,17 +92,19 @@ fi
 # To configure prerequisites
 #
 # 5.
-yum install -q -y lvm2 || exit 1
+yum install -q -y qemu-img || exit 1
 # 6.
+yum install -q -y lvm2 || exit 1
+# 7.
 systemctl enable lvm2-lvmetad.service
 systemctl start lvm2-lvmetad.service
-# 7., 8.
+# 8., 9.
 vgcreate cinder-volumes ${goodpvs} || exit 1
 
 #
 # Install and configure Block Storage volume components
 #
-yum install -q -y openstack-cinder targetcli python-oslo-db MySQL-python || exit 1
+yum install -q -y openstack-cinder targetcli python-oslo-db python-oslo-log MySQL-python || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf
 [database]
@@ -110,26 +112,41 @@ connection = mysql://cinder:${CINDER_DBPASS}@${CONTROLLER_HOSTNAME}/cinder
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = cinder
-admin_password = ${CINDER_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = cinder
+password = ${CINDER_PASS}
 ...
 [DEFAULT]
 my_ip = ${MANAGEMENT_IP_ADDR}
 ...
+[lvm]
+volume_driver = cinder.volume.drivers.lvm.LVMVolumeDriver
+volume_group = cinder-volumes
+iscsi_protocol = iscsi
+iscsi_helper = lioadm
+...
+[DEFAULT]
+enabled_backends = lvm
+...
 [DEFAULT]
 glance_host = ${CONTROLLER_HOSTNAME}
 ...
-[DEFAULT]
-iscsi_helper = lioadm
+[oslo_concurrency]
+#lock_path = /var/lock/cinder
+lock_path = /var/lib/cinder/tmp
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf
 
@@ -137,6 +154,8 @@ modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf
 # http://www.gossamer-threads.com/lists/openstack/operators/30097
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf.storage_ip
 [DEFAULT]
+iscsi_ip_address = ${STORAGE_NETWORK_IF_IP}
+[lvm]
 iscsi_ip_address = ${STORAGE_NETWORK_IF_IP}
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf.storage_ip

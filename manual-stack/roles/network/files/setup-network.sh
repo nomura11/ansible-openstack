@@ -97,17 +97,22 @@ yum install -q -y openstack-neutron openstack-neutron-ml2 openstack-neutron-open
 cat <<EOF | tee ${SETUPDIR}/mod-net-neutron.conf
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = neutron
-admin_password = ${NEUTRON_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 ...
 [DEFAULT]
 core_plugin = ml2
@@ -121,7 +126,7 @@ modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-net-neutron.conf
 #
 cat <<EOF | tee ${SETUPDIR}/mod-net-ml2_conf.ini
 [ml2]
-type_drivers = flat,gre
+type_drivers = flat,vlan,gre,vxlan
 tenant_network_types = gre
 mechanism_drivers = openvswitch
 ...
@@ -138,7 +143,6 @@ firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewal
 ...
 [ovs]
 local_ip = ${NETWORK_TUNNEL_IF_IP}
-enable_tunneling = True
 bridge_mappings = external:br-ex
 ...
 [agent]
@@ -152,8 +156,7 @@ modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-net-ml2_con
 cat <<EOF | tee ${SETUPDIR}/mod-net-l3_agent.ini
 [DEFAULT]
 interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-use_namespaces = True
-external_network_bridge = br-ex
+external_network_bridge = 
 router_delete_namespaces = True
 EOF
 modify_inifile /etc/neutron/l3_agent.ini ${SETUPDIR}/mod-net-l3_agent.ini
@@ -174,7 +177,6 @@ cat <<EOF | tee ${SETUPDIR}/mod-net-dhcp_agent.ini
 [DEFAULT]
 interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
 dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
-use_namespaces = True
 dhcp_delete_namespaces = True
 EOF
 modify_inifile /etc/neutron/dhcp_agent.ini ${SETUPDIR}/mod-net-dhcp_agent.ini
@@ -193,11 +195,15 @@ pkill dnsmasq
 #
 cat <<EOF | tee ${SETUPDIR}/mod-net-metadata_agent.ini
 [DEFAULT]
-auth_url = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-auth_region = regionOne
-admin_tenant_name = service
-admin_user = neutron
-admin_password = ${NEUTRON_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_region = RegionOne
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 ...
 [DEFAULT]
 nova_metadata_ip = ${CONTROLLER_HOSTNAME}

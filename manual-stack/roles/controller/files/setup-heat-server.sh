@@ -73,13 +73,16 @@ fi
 create_database heat ${HEAT_DBPASS}
 service_create ${SETUPDIR}/service-def-heat.sh
 service_create ${SETUPDIR}/service-def-heat-cfn.sh
-
-keystone role-create --name heat_stack_owner
-keystone role-create --name heat_stack_user
+openstack role create heat_stack_owner
+openstack role create heat_stack_user
 #
-keystone user-role-add --user demo --tenant demo --role heat_stack_owner
+#openstack role add --project demo --user demo heat_stack_owner
+openstack role add --project admin --user admin heat_stack_owner
 
+# 1., 2.
 yum install -q -y openstack-heat-api openstack-heat-api-cfn openstack-heat-engine python-heatclient || exit 1
+cp /usr/share/heat/heat-dist.conf /etc/heat/heat.conf
+chown -R heat:heat /etc/heat/heat.conf
 
 cat <<EOF | tee ${SETUPDIR}/mod-heat.conf
 [database]
@@ -87,7 +90,9 @@ connection = mysql://heat:${HEAT_DBPASS}@${CONTROLLER_HOSTNAME}/heat
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [keystone_authtoken]
@@ -102,11 +107,26 @@ auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 [DEFAULT]
 heat_metadata_server_url = http://${CONTROLLER_HOSTNAME}:8000
 heat_waitcondition_server_url = http://${CONTROLLER_HOSTNAME}:8000/v1/waitcondition
+...
+[DEFAULT]
+stack_domain_admin = heat_domain_admin
+stack_domain_admin_password = ${HEAT_DOMAIN_PASS}
+stack_user_domain_name = heat_user_domain
+...
 EOF
 modify_inifile /etc/heat/heat.conf ${SETUPDIR}/mod-heat.conf
+sed -i -e 's/^sql_connection/#sql_connection/' -e 's/^db_backend/#db_backend/' /etc/heat/heat.conf
 
+# 3.
+heat-keystone-setup-domain \
+  --stack-user-domain-name heat_user_domain \
+  --stack-domain-admin heat_domain_admin \
+  --stack-domain-admin-password ${HEAT_DOMAIN_PASS}
+
+# 4.
 su -s /bin/sh -c "heat-manage db_sync" heat
 
+# To finalize installation
 systemctl enable openstack-heat-api.service openstack-heat-api-cfn.service \
   openstack-heat-engine.service
 systemctl start openstack-heat-api.service openstack-heat-api-cfn.service \

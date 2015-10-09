@@ -82,17 +82,22 @@ connection = mysql://neutron:${NEUTRON_DBPASS}@${CONTROLLER_HOSTNAME}/neutron
 ...
 [DEFAULT]
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
+rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = neutron
-admin_password = ${NEUTRON_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 ...
 [DEFAULT]
 core_plugin = ml2
@@ -103,11 +108,15 @@ allow_overlapping_ips = True
 notify_nova_on_port_status_changes = True
 notify_nova_on_port_data_changes = True
 nova_url = http://${CONTROLLER_HOSTNAME}:8774/v2
-nova_admin_auth_url = http://${CONTROLLER_HOSTNAME}:35357/v2.0
-nova_region_name = regionOne
-nova_admin_username = nova
-nova_admin_tenant_id = ${service_tenant_id}
-nova_admin_password = ${NOVA_PASS}
+[nova]
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = nova
+password = ${NOVA_PASS}
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-neutron.conf
 
@@ -116,7 +125,7 @@ modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-neutron.conf
 #
 cat <<EOF | tee ${SETUPDIR}/mod-ml2.conf.neutron
 [ml2]
-type_drivers = flat,gre
+type_drivers = flat,vlan,gre,vxlan
 tenant_network_types = gre
 mechanism_drivers = openvswitch
 ...
@@ -148,7 +157,6 @@ admin_tenant_name = service
 admin_username = neutron
 admin_password = ${NEUTRON_PASS}
 ...
-[neutron]
 service_metadata_proxy = True
 metadata_proxy_shared_secret = ${NEUTRON_SHARED_SECRET}
 EOF
@@ -159,7 +167,7 @@ modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf.neutron
 #
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
 su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf \
-  --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade juno" neutron
+  --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
 systemctl restart openstack-nova-api.service openstack-nova-scheduler.service \
   openstack-nova-conductor.service
 systemctl enable neutron-server.service
