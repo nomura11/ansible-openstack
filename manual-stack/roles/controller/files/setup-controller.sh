@@ -17,6 +17,26 @@ if [ ! -d "${SETUPDIR}" ]; then
 	exit 1
 fi
 
+if [ -z "$CONTROLLER_TUNNEL_IF" ]; then
+	echo "CONTROLLER_TUNNEL_IF not defined"
+else
+	ifup "$CONTROLLER_TUNNEL_IF"
+	if [ $? -ne 0 ]; then
+		echo "Failed to activate ${CONTROLLER_TUNNEL_IF}"
+		exit 1
+	fi
+fi
+
+if [ -z "$CONTROLLER_EXTERNAL_IF" ]; then
+	echo "CONTROLLER_EXTERNAL_IF not defined"
+else
+	ifup "$CONTROLLER_EXTERNAL_IF"
+	if [ $? -ne 0 ]; then
+		echo "Failed to activate ${CONTROLLER_EXTERNAL_IF}"
+		exit 1
+	fi
+fi
+
 # -------------------------------------------------------------
 export PATH=${SETUPDIR}:$PATH
 

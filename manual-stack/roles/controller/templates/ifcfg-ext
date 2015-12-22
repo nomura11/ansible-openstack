@@ -1,0 +1,4 @@
+DEVICE="{{extif}}"
+TYPE=Ethernet
+ONBOOT="yes"
+BOOTPROTO="none"

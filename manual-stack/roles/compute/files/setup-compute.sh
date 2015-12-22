@@ -51,6 +51,16 @@ else
 	fi
 fi
 
+if [ -z "$COMPUTE_EXTERNAL_IF" ]; then
+	echo "COMPUTE_EXTERNAL_IF not defined"
+else
+	ifup "$COMPUTE_EXTERNAL_IF"
+	if [ $? -ne 0 ]; then
+		echo "Failed to activate ${COMPUTE_EXTERNAL_IF}"
+		exit 1
+	fi
+fi
+
 # -------------------------------------------------------------
 PWDFILE=${SETUPDIR}/pass.txt
 export PATH=${SETUPDIR}:$PATH
