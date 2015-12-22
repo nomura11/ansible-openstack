@@ -131,29 +131,6 @@ systemctl start openstack-nova-api.service openstack-nova-cert.service \
   openstack-nova-consoleauth.service openstack-nova-scheduler.service \
   openstack-nova-conductor.service openstack-nova-novncproxy.service
 
-# FIXME: why
-sleep 5
-rm -f /var/lib/nova/nova.sqlite
-
-# -------------------------------------------------------------
-#
-# nova-network
-#
-## Disable for now (nova-network)
-if [ 1 -eq 0 ]; then
-cat <<EOF | tee ${SETUPDIR}/mod-nova.conf.network
-[DEFAULT]
-network_api_class = nova.network.api.API
-security_group_api = nova
-EOF
-modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf.network
-
-service nova-api restart
-service nova-scheduler restart
-service nova-conductor restart
-fi
-## Disable for now (nova-network)
-
 # -------------------------------------------------------------
 # Done
 touch $donefile

@@ -116,10 +116,6 @@ su -s /bin/sh -c "cinder-manage db sync" cinder
 systemctl enable openstack-cinder-api.service openstack-cinder-scheduler.service
 systemctl start openstack-cinder-api.service openstack-cinder-scheduler.service
 
-# FIXME: why
-sleep 5
-rm -f /var/lib/cinder/cinder.sqlite 
-
 # -------------------------------------------------------------
 # Done
 touch $donefile

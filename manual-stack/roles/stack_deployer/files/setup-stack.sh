@@ -164,32 +164,6 @@ neutron floatingip-create ${EXTNET_NAME}
 
 
 # -------------------------------------------------------------
-#
-# Nova Network (FlatDHCP + multihost)
-#
-touch $donefile
-exit 0
-
-if (nova network-show ${ADMINNET_NAME}); then
-	# already done
-	exit 0
-fi
-
-tenant_id=$(keystone tenant-list | awk '$4 == "admin" { print $2 }')
-nova network-create ${ADMINNET_NAME} \
-	--fixed-range-v4=${ADMINNET_CIDR} \
-	--project-id ${tenant_id} \
-	--multi-host=T
-
-# floating IP pool
-nova floating-ip-bulk-create --pool "${EXTNET_NAME}" \
-	--interface ${NETWORK_EXTERNAL_IF} \
-	${EXTNET_CIDR}
-
-# allocate 1 floating IP
-nova floating-ip-create ${EXTNET_NAME}
-
-# -------------------------------------------------------------
 
 touch $donefile
 exit 0
