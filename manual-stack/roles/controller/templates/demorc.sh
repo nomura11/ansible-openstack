@@ -6,3 +6,5 @@ export OS_USERNAME=demo
 export OS_PASSWORD={{ demo_pass }}
 export OS_AUTH_URL=http://{{ controller_hostname }}:5000/v3
 export OS_VOLUME_API_VERSION=2
+export OS_IMAGE_API_VERSION=2
+export OS_IDENTITY_API_VERSION=3

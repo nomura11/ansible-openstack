@@ -91,20 +91,19 @@ fi
 #
 # To configure prerequisites
 #
-# 5.
-yum install -q -y qemu-img || exit 1
-# 6.
+# 1.
 yum install -q -y lvm2 || exit 1
-# 7.
 systemctl enable lvm2-lvmetad.service
 systemctl start lvm2-lvmetad.service
-# 8., 9.
+# 2., 3.
 vgcreate cinder-volumes ${goodpvs} || exit 1
+# ?.
+#yum install -q -y qemu-img || exit 1
 
 #
 # Install and configure Block Storage volume components
 #
-yum install -q -y openstack-cinder targetcli python-oslo-db python-oslo-log MySQL-python || exit 1
+yum install -q -y openstack-cinder targetcli python-oslo-policy || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf
 [database]
@@ -145,7 +144,6 @@ enabled_backends = lvm
 glance_host = ${CONTROLLER_HOSTNAME}
 ...
 [oslo_concurrency]
-#lock_path = /var/lock/cinder
 lock_path = /var/lib/cinder/tmp
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf
@@ -174,7 +172,6 @@ systemctl start openstack-cinder-volume.service target.service
 
 cat <<EOF | tee ${SETUPDIR}/mod-blk-cinder.conf.ceilometer
 [DEFAULT]
-control_exchange = cinder
 notification_driver = messagingv2
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-blk-cinder.conf.ceilometer

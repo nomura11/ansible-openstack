@@ -85,10 +85,10 @@ connection = mysql://keystone:${KEYSTONE_DBPASS}@${CONTROLLER_HOSTNAME}/keystone
 [memcache]
 servers = localhost:11211
 [token]
-provider = keystone.token.providers.uuid.Provider
-driver = keystone.token.persistence.backends.memcache.Token
+provider = uuid
+driver = memcache
 [revoke]
-driver = keystone.contrib.revoke.backends.sql.Revoke
+driver = sql
 EOF
 modify_inifile /etc/keystone/keystone.conf ${SETUPDIR}/mod-keystone.conf
 
@@ -104,33 +104,49 @@ Listen 35357
 <VirtualHost *:5000>
     WSGIDaemonProcess keystone-public processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
     WSGIProcessGroup keystone-public
-    WSGIScriptAlias / /var/www/cgi-bin/keystone/main
+    WSGIScriptAlias / /usr/bin/keystone-wsgi-public
     WSGIApplicationGroup %{GLOBAL}
     WSGIPassAuthorization On
-    LogLevel info
-    ErrorLogFormat "%{cu}t %M"
+    <IfVersion >= 2.4>
+        ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
     ErrorLog /var/log/httpd/keystone-error.log
     CustomLog /var/log/httpd/keystone-access.log combined
+
+    <Directory /usr/bin>
+        <IfVersion >= 2.4>
+            Require all granted
+        </IfVersion>
+        <IfVersion < 2.4>
+            Order allow,deny
+            Allow from all
+        </IfVersion>
+    </Directory>
 </VirtualHost>
 
 <VirtualHost *:35357>
     WSGIDaemonProcess keystone-admin processes=5 threads=1 user=keystone group=keystone display-name=%{GROUP}
     WSGIProcessGroup keystone-admin
-    WSGIScriptAlias / /var/www/cgi-bin/keystone/admin
+    WSGIScriptAlias / /usr/bin/keystone-wsgi-admin
     WSGIApplicationGroup %{GLOBAL}
     WSGIPassAuthorization On
-    LogLevel info
-    ErrorLogFormat "%{cu}t %M"
+    <IfVersion >= 2.4>
+        ErrorLogFormat "%{cu}t %M"
+    </IfVersion>
     ErrorLog /var/log/httpd/keystone-error.log
     CustomLog /var/log/httpd/keystone-access.log combined
+
+    <Directory /usr/bin>
+        <IfVersion >= 2.4>
+            Require all granted
+        </IfVersion>
+        <IfVersion < 2.4>
+            Order allow,deny
+            Allow from all
+        </IfVersion>
+    </Directory>
 </VirtualHost>
 EOF
-mkdir -p /var/www/cgi-bin/keystone
-#curl http://git.openstack.org/cgit/openstack/keystone/plain/httpd/keystone.py?h=stable/kilo \
-cat ${SETUPDIR}/keystone-main \
-  | tee /var/www/cgi-bin/keystone/main /var/www/cgi-bin/keystone/admin
-chown -R keystone:keystone /var/www/cgi-bin/keystone
-chmod 755 /var/www/cgi-bin/keystone/*
 systemctl enable httpd.service
 systemctl start httpd.service
 else
@@ -145,37 +161,38 @@ fi
 #
 
 export OS_TOKEN=${ADMIN_TOKEN}
-export OS_URL=http://${CONTROLLER_HOSTNAME}:35357/v2.0
+export OS_URL=http://${CONTROLLER_HOSTNAME}:35357/v3
+export OS_IDENTITY_API_VERSION=3
 
 # Endpoints
 service_create ${SETUPDIR}/service-def-keystone.sh
 
 # Admin
-openstack project create --description "Admin Project" admin
+openstack project create --domain default --description "Admin Project" admin
 if ! (openstack project list | grep admin); then
 	echo "Failed to create tenant: admin"
 	exit 1
 fi
-openstack user create --password $ADMIN_PASS --email admin@localhost admin
+openstack user create --domain default --password $ADMIN_PASS admin
 openstack role create admin
 openstack role add --project admin --user admin admin
 
-# Demo
-openstack project create --description "Demo Project" demo
-if ! (openstack project list | grep demo); then
-	echo "Failed to create tenant: demo"
-	exit 1
-fi
-openstack user create --password $DEMO_PASS --email demo@localhost demo
-openstack role create user
-openstack role add --project demo --user demo user
-
 # Service
-openstack project create --description "Service Project" service
+openstack project create --domain default --description "Service Project" service
 if ! (openstack project list | grep service); then
 	echo "Failed to create tenant: service"
 	exit 1
 fi
+
+# Demo
+openstack project create --domain default --description "Demo Project" demo
+if ! (openstack project list | grep demo); then
+	echo "Failed to create tenant: demo"
+	exit 1
+fi
+openstack user create --domain default --password $DEMO_PASS demo
+openstack role create user
+openstack role add --project demo --user demo user
 
 unset OS_URL
 unset OS_TOKEN

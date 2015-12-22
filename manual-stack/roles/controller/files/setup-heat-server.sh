@@ -51,6 +51,10 @@ if [ -z "${ADMIN_PASS}" ]; then
 	echo "ADMIN_PASS is not set"
 	exit 1
 fi
+if [ -z "$HEAT_DOMAIN_PASS" ]; then
+	echo "HEAT_DOMAIN_PASS not defined"
+	exit 1
+fi
 
 #
 # openrc
@@ -70,19 +74,27 @@ fi
 # Heat
 #
 
+# Prerequisites
+# 1.
 create_database heat ${HEAT_DBPASS}
+# 2. -- 4.
 service_create ${SETUPDIR}/service-def-heat.sh
 service_create ${SETUPDIR}/service-def-heat-cfn.sh
-openstack role create heat_stack_owner
-openstack role create heat_stack_user
+# 5.
+openstack domain create --description "Stack projects and users" heat
+openstack user create --domain heat --password ${HEAT_DOMAIN_PASS} heat_domain_admin
 #
-#openstack role add --project demo --user demo heat_stack_owner
-openstack role add --project admin --user admin heat_stack_owner
+openstack role add --domain heat --user heat_domain_admin admin
+openstack role create heat_stack_owner
+openstack role add --project demo --user demo heat_stack_owner
+#openstack role add --project admin --user admin heat_stack_owner
+#
+openstack role create heat_stack_user
 
+# Install and configure components
 # 1., 2.
-yum install -q -y openstack-heat-api openstack-heat-api-cfn openstack-heat-engine python-heatclient || exit 1
-cp /usr/share/heat/heat-dist.conf /etc/heat/heat.conf
-chown -R heat:heat /etc/heat/heat.conf
+yum install -q -y openstack-heat-api openstack-heat-api-cfn \
+  openstack-heat-engine python-heatclient || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-heat.conf
 [database]
@@ -96,13 +108,30 @@ rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = heat
-admin_password = ${HEAT_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = heat
+password = ${HEAT_PASS}
+...
+[trustee]
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = heat
+password = ${HEAT_PASS}
+...
+[clients_keystone]
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+...
 [ec2authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
 ...
 [DEFAULT]
 heat_metadata_server_url = http://${CONTROLLER_HOSTNAME}:8000
@@ -111,26 +140,19 @@ heat_waitcondition_server_url = http://${CONTROLLER_HOSTNAME}:8000/v1/waitcondit
 [DEFAULT]
 stack_domain_admin = heat_domain_admin
 stack_domain_admin_password = ${HEAT_DOMAIN_PASS}
-stack_user_domain_name = heat_user_domain
+stack_user_domain_name = heat
 ...
 EOF
 modify_inifile /etc/heat/heat.conf ${SETUPDIR}/mod-heat.conf
-sed -i -e 's/^sql_connection/#sql_connection/' -e 's/^db_backend/#db_backend/' /etc/heat/heat.conf
 
 # 3.
-heat-keystone-setup-domain \
-  --stack-user-domain-name heat_user_domain \
-  --stack-domain-admin heat_domain_admin \
-  --stack-domain-admin-password ${HEAT_DOMAIN_PASS}
-
-# 4.
 su -s /bin/sh -c "heat-manage db_sync" heat
 
 # To finalize installation
-systemctl enable openstack-heat-api.service openstack-heat-api-cfn.service \
-  openstack-heat-engine.service
-systemctl start openstack-heat-api.service openstack-heat-api-cfn.service \
-  openstack-heat-engine.service
+systemctl enable openstack-heat-api.service \
+  openstack-heat-api-cfn.service openstack-heat-engine.service
+systemctl start openstack-heat-api.service \
+  openstack-heat-api-cfn.service openstack-heat-engine.service
 
 # -------------------------------------------------------------
 # Done

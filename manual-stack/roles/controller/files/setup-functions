@@ -67,7 +67,7 @@ function service_create {
 
 	# Create service account
 	if [ "$SERVICE_EMAIL" ]; then
-		openstack user create --password ${SERVICE_PASS} ${SERVICE_NAME}
+		openstack user create --domain default --password ${SERVICE_PASS} ${SERVICE_NAME}
 		openstack role add --project service --user ${SERVICE_NAME} admin
 		openstack user show ${SERVICE_NAME}
 	fi
@@ -77,12 +77,12 @@ function service_create {
 		--name ${SERVICE_NAME} \
 		--description "${SERVICE_DESCRIPTION}" \
 		${SERVICE_TYPE}
-	openstack endpoint create \
-		--publicurl ${SERVICE_URL_PUBLIC} \
-		--internalurl ${SERVICE_URL_INTERNAL} \
-		--adminurl ${SERVICE_URL_ADMIN} \
-		--region RegionOne \
-		${SERVICE_TYPE}
+	openstack endpoint create --region RegionOne \
+		${SERVICE_TYPE} public ${SERVICE_URL_PUBLIC}
+	openstack endpoint create --region RegionOne \
+		${SERVICE_TYPE} internal ${SERVICE_URL_INTERNAL}
+	openstack endpoint create --region RegionOne \
+		${SERVICE_TYPE} admin ${SERVICE_URL_ADMIN}
 
 	openstack service show ${SERVICE_NAME}
 	if [ $? -ne 0 ]; then

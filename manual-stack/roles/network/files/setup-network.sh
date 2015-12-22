@@ -87,7 +87,8 @@ sysctl -p
 #
 # To install the Networking components
 #
-yum install -q -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch || exit 1
+yum install -q -y openstack-neutron openstack-neutron-ml2 \
+  openstack-neutron-openvswitch || exit 1
 
 #
 # To configure the Networking common components
@@ -95,6 +96,11 @@ yum install -q -y openstack-neutron openstack-neutron-ml2 openstack-neutron-open
 
 #service_tenant_id=$(keystone tenant-get service | awk '$2 == "id" { print $4 }')
 cat <<EOF | tee ${SETUPDIR}/mod-net-neutron.conf
+[DEFAULT]
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
+...
 [DEFAULT]
 rpc_backend = rabbit
 [oslo_messaging_rabbit]
@@ -114,10 +120,8 @@ project_name = service
 username = neutron
 password = ${NEUTRON_PASS}
 ...
-[DEFAULT]
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-net-neutron.conf
 
@@ -126,29 +130,52 @@ modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-net-neutron.conf
 #
 cat <<EOF | tee ${SETUPDIR}/mod-net-ml2_conf.ini
 [ml2]
-type_drivers = flat,vlan,gre,vxlan
-tenant_network_types = gre
+type_drivers = flat,vlan,vxlan
+tenant_network_types = vxlan
 mechanism_drivers = openvswitch
 ...
-[ml2_type_flat]
-flat_networks = external
+[ml2]
+#extension_drivers = port_security
 ...
-[ml2_type_gre]
-tunnel_id_ranges = 1:1000
+[ml2_type_flat]
+flat_networks = public
+...
+[ml2_type_vxlan]
+vni_ranges = 1:1000
 ...
 [securitygroup]
 enable_security_group = True
-enable_ipset = True
 firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
-...
-[ovs]
-local_ip = ${NETWORK_TUNNEL_IF_IP}
-bridge_mappings = external:br-ex
-...
-[agent]
-tunnel_types = gre
 EOF
 modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-net-ml2_conf.ini
+
+#
+# To configure the Open Vswitch agent
+#
+cat <<EOF | tee ${SETUPDIR}/mod-ml2-openvswitch_agent.ini.neutron
+[ovs]
+integration_bridge = br-int
+tunnel_bridge = br-tun
+local_ip = ${NETWORK_TUNNEL_IF_IP}
+enable_tunneling = True
+bridge_mappings = public:br-ex
+...
+[agent]
+polling_interval = 2
+tunnel_types =vxlan
+vxlan_udp_port =4789
+l2_population = False
+arp_responder = False
+prevent_arp_spoofing = True
+enable_distributed_routing = False
+drop_flows_on_start=False
+...
+[securitygroup]
+enable_security_group = True
+firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+...
+EOF
+modify_inifile /etc/neutron/plugins/ml2/openvswitch_agent.ini ${SETUPDIR}/mod-ml2-openvswitch_agent.ini.neutron
 
 #
 # To configure the Layer-3 (L3) agent
@@ -157,18 +184,8 @@ cat <<EOF | tee ${SETUPDIR}/mod-net-l3_agent.ini
 [DEFAULT]
 interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
 external_network_bridge = 
-router_delete_namespaces = True
 EOF
 modify_inifile /etc/neutron/l3_agent.ini ${SETUPDIR}/mod-net-l3_agent.ini
-
-# Reduce MTU of the router to workaround GRE/OVS problem(?)
-## https://bugs.launchpad.net/neutron/+bug/1311097
-cat <<EOF | tee ${SETUPDIR}/mod-net-l3_agent.ini.mtu-workaround
-[DEFAULT]
-network_device_mtu = 1470
-EOF
-modify_inifile /etc/neutron/l3_agent.ini ${SETUPDIR}/mod-net-l3_agent.ini.mtu-workaround
-
 
 #
 # To configure the DHCP agent
@@ -187,7 +204,7 @@ cat <<EOF | tee ${SETUPDIR}/mod-net-dhcp_agent.ini.mtu
 dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
 EOF
 modify_inifile /etc/neutron/dhcp_agent.ini ${SETUPDIR}/mod-net-dhcp_agent.ini.mtu
-echo "dhcp-option-force=26,1454" >  /etc/neutron/dnsmasq-neutron.conf
+echo "dhcp-option-force=26,1450" >  /etc/neutron/dnsmasq-neutron.conf
 pkill dnsmasq
 
 #
@@ -227,11 +244,6 @@ ovs-vsctl add-port br-ex ${NETWORK_EXTERNAL_IF}
 #
 # 1.
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
-# Due to packaging bug, ..
-cp /usr/lib/systemd/system/neutron-openvswitch-agent.service \
-  /usr/lib/systemd/system/neutron-openvswitch-agent.service.orig
-sed -i 's,plugins/openvswitch/ovs_neutron_plugin.ini,plugin.ini,g' \
-  /usr/lib/systemd/system/neutron-openvswitch-agent.service
 # 2.
 systemctl enable neutron-openvswitch-agent.service neutron-l3-agent.service \
   neutron-dhcp-agent.service neutron-metadata-agent.service \

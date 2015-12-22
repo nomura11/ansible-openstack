@@ -24,7 +24,6 @@ elif [ -z "$DBROOTPASS" ]; then
 	echo "DBROOTPASS not defined"
 	exit 1
 fi
-
 if [ -z "$CONTROLLER_EXTERNAL_IF" ]; then
 	echo "CONTROLLER_EXTERNAL_IF not defined"
 fi
@@ -80,7 +79,9 @@ fi
 create_database neutron ${NEUTRON_DBPASS}
 service_create ${SETUPDIR}/service-def-neutron.sh
 
-yum install -q -y openstack-neutron openstack-neutron-ml2 python-neutronclient which || exit 1
+yum install -q -y openstack-neutron openstack-neutron-ml2 \
+  python-neutronclient || exit 1
+
 if [ ! -z "$CONTROLLER_TUNNEL_IF_IP" ]; then
 	yum install -q -y openstack-neutron-openvswitch ebtables ipset || exit 1
 fi
@@ -89,6 +90,11 @@ service_tenant_id=$(keystone tenant-get service | awk '$2 == "id" { print $4 }')
 cat <<EOF | tee ${SETUPDIR}/mod-neutron.conf
 [database]
 connection = mysql://neutron:${NEUTRON_DBPASS}@${CONTROLLER_HOSTNAME}/neutron
+...
+[DEFAULT]
+core_plugin = ml2
+service_plugins = router
+allow_overlapping_ips = True
 ...
 [DEFAULT]
 rpc_backend = rabbit
@@ -110,11 +116,6 @@ username = neutron
 password = ${NEUTRON_PASS}
 ...
 [DEFAULT]
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
-...
-[DEFAULT]
 notify_nova_on_port_status_changes = True
 notify_nova_on_port_data_changes = True
 nova_url = http://${CONTROLLER_HOSTNAME}:8774/v2
@@ -127,6 +128,9 @@ region_name = RegionOne
 project_name = service
 username = nova
 password = ${NOVA_PASS}
+...
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-neutron.conf
 
@@ -135,57 +139,65 @@ modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-neutron.conf
 #
 cat <<EOF | tee ${SETUPDIR}/mod-ml2.conf.neutron
 [ml2]
-type_drivers = flat,vlan,gre,vxlan
-tenant_network_types = gre
+type_drivers = flat,vlan,vxlan
+tenant_network_types = vxlan
 mechanism_drivers = openvswitch
 ...
-[ml2_type_gre]
-tunnel_id_ranges = 1:1000
+[ml2]
+#extension_drivers = port_security
+...
+[ml2_type_flat]
+flat_networks = public
+...
+[ml2_type_vxlan]
+vni_ranges = 1:1000
 ...
 [securitygroup]
 enable_security_group = True
-enable_ipset = True
 firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
 EOF
 modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-ml2.conf.neutron
 
 #
 if [ ! -z "${CONTROLLER_TUNNEL_IF_IP}" ]; then
+
 #
 # To configure the Open Vswitch agent
 #
 cat <<EOF | tee ${SETUPDIR}/mod-ml2-openvswitch_agent.ini.neutron
-[ml2_type_flat]
-flat_networks = external
-...
 [ovs]
+integration_bridge = br-int
+tunnel_bridge = br-tun
 local_ip = ${CONTROLLER_TUNNEL_IF_IP}
-bridge_mappings = external:br-ex
+enable_tunneling = True
+bridge_mappings = public:br-ex
 ...
 [agent]
-tunnel_types = gre
+polling_interval = 2
+tunnel_types =vxlan
+vxlan_udp_port =4789
+l2_population = False
+arp_responder = False
+prevent_arp_spoofing = True
+enable_distributed_routing = False
+drop_flows_on_start=False
+...
+[securitygroup]
+enable_security_group = True
+firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
+...
 EOF
-modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-ml2-openvswitch_agent.ini.neutron
+modify_inifile /etc/neutron/plugins/ml2/openvswitch_agent.ini ${SETUPDIR}/mod-ml2-openvswitch_agent.ini.neutron
 
 #
-# To configure the Layer-3 (L3) agent
+# To configure the layer-3 agent
 #
 cat <<EOF | tee ${SETUPDIR}/mod-l3_agent.ini.neutron
 [DEFAULT]
 interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
-external_network_bridge = 
-router_delete_namespaces = True
+external_network_bridge =
 EOF
 modify_inifile /etc/neutron/l3_agent.ini ${SETUPDIR}/mod-l3_agent.ini.neutron
-
-# Reduce MTU of the router to workaround GRE/OVS problem(?)
-## https://bugs.launchpad.net/neutron/+bug/1311097
-cat <<EOF | tee ${SETUPDIR}/mod-l3_agent.ini.mtu-workaround
-[DEFAULT]
-network_device_mtu = 1470
-EOF
-modify_inifile /etc/neutron/l3_agent.ini ${SETUPDIR}/mod-l3_agent.ini.mtu-workaround
-
 
 #
 # To configure the DHCP agent
@@ -194,7 +206,7 @@ cat <<EOF | tee ${SETUPDIR}/mod-dhcp_agent.ini.neutron
 [DEFAULT]
 interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
 dhcp_driver = neutron.agent.linux.dhcp.Dnsmasq
-dhcp_delete_namespaces = True
+enable_isolated_metadata = True
 EOF
 modify_inifile /etc/neutron/dhcp_agent.ini ${SETUPDIR}/mod-dhcp_agent.ini.neutron
 
@@ -204,7 +216,7 @@ cat <<EOF | tee ${SETUPDIR}/mod-dhcp_agent.ini.mtu.neutron
 dnsmasq_config_file = /etc/neutron/dnsmasq-neutron.conf
 EOF
 modify_inifile /etc/neutron/dhcp_agent.ini ${SETUPDIR}/mod-dhcp_agent.ini.mtu.neutron
-echo "dhcp-option-force=26,1454" >  /etc/neutron/dnsmasq-neutron.conf
+echo "dhcp-option-force=26,1450" >  /etc/neutron/dnsmasq-neutron.conf
 pkill dnsmasq
 
 #
@@ -230,35 +242,23 @@ metadata_proxy_shared_secret = ${NEUTRON_SHARED_SECRET}
 EOF
 modify_inifile /etc/neutron/metadata_agent.ini ${SETUPDIR}/mod-metadata_agent.ini.neutron
 
-#
-# To configure the Open vSwitch (OVS) service
-#
-systemctl enable openvswitch.service
-systemctl start openvswitch.service
-ovs-vsctl add-br br-ex
-ovs-vsctl add-port br-ex ${CONTROLLER_EXTERNAL_IF}
-ethtool -K ${CONTROLLER_EXTERNAL_IF} gro off
-
 fi
-# end of : [ ! -z "${CONTROLLER_TUNNEL_IF_IP}" ]
+# endif ${CONTROLLER_TUNNEL_IF_IP}
 
 #
 # To configure Compute to use Networking
 #
 cat <<EOF | tee ${SETUPDIR}/mod-nova.conf.neutron
-[DEFAULT]
-network_api_class = nova.network.neutronv2.api.API
-security_group_api = neutron
-linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-firewall_driver = nova.virt.firewall.NoopFirewallDriver
-...
 [neutron]
 url = http://${CONTROLLER_HOSTNAME}:9696
-auth_strategy = keystone
-admin_auth_url = http://${CONTROLLER_HOSTNAME}:35357/v2.0
-admin_tenant_name = service
-admin_username = neutron
-admin_password = ${NEUTRON_PASS}
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 ...
 service_metadata_proxy = True
 metadata_proxy_shared_secret = ${NEUTRON_SHARED_SECRET}
@@ -266,25 +266,45 @@ EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf.neutron
 
 #
+if [ ! -z "${CONTROLLER_TUNNEL_IF_IP}" ]; then
+
+#
+# To configure the Open vSwitch (OVS) service
+#
+systemctl enable openvswitch.service
+systemctl start openvswitch.service
+ovs-vsctl add-br br-ex
+ovs-vsctl add-port br-ex ${CONTROLLER_EXTERNAL_IF}
+#ethtool -K ${CONTROLLER_EXTERNAL_IF} gro off
+
+fi
+# endif ${CONTROLLER_TUNNEL_IF_IP}
+
+#
 # To finalize installation
 #
+# 1.
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
+# 2.
 su -s /bin/sh -c "neutron-db-manage --config-file /etc/neutron/neutron.conf \
   --config-file /etc/neutron/plugins/ml2/ml2_conf.ini upgrade head" neutron
-systemctl restart openstack-nova-api.service openstack-nova-scheduler.service \
-  openstack-nova-conductor.service
+# 3.
+systemctl restart openstack-nova-api.service
+
+# 4.
 if [ -z "$CONTROLLER_TUNNEL_IF_IP" ]; then
 	systemctl enable neutron-server.service
 	systemctl start neutron-server.service
 else
-	systemctl enable neutron-server.service \
-		neutron-openvswitch-agent.service neutron-dhcp-agent.service \
-		neutron-metadata-agent.service
-	systemctl start neutron-server.service \
-		neutron-openvswitch-agent.service neutron-dhcp-agent.service \
-		neutron-metadata-agent.service
-	systemctl enable neutron-l3-agent.service
-	systemctl start neutron-l3-agent.service
+systemctl enable neutron-server.service \
+  neutron-openvswitch-agent.service neutron-dhcp-agent.service \
+  neutron-metadata-agent.service
+systemctl start neutron-server.service \
+  neutron-openvswitch-agent.service neutron-dhcp-agent.service \
+  neutron-metadata-agent.service
+
+systemctl enable neutron-l3-agent.service
+systemctl start neutron-l3-agent.service
 fi
 
 # -------------------------------------------------------------

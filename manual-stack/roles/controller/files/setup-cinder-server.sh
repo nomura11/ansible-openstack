@@ -74,10 +74,7 @@ create_database cinder ${CINDER_DBPASS}
 service_create ${SETUPDIR}/service-def-cinder-v1.sh
 service_create ${SETUPDIR}/service-def-cinder-v2.sh
 
-yum install -q -y openstack-cinder python-cinderclient python-oslo-db || exit 1
-
-cp /usr/share/cinder/cinder-dist.conf /etc/cinder/cinder.conf
-chown -R cinder:cinder /etc/cinder/cinder.conf
+yum install -q -y openstack-cinder python-cinderclient || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-cinder.conf
 [database]
@@ -106,13 +103,23 @@ password=${CINDER_PASS}
 my_ip = ${CONTROLLER_IP_ADDR}
 ...
 [oslo_concurrency]
-#lock_path = /var/lock/cinder
 lock_path = /var/lib/cinder/tmp
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-cinder.conf
 
 su -s /bin/sh -c "cinder-manage db sync" cinder
 
+# Configure Compute to use Block Storage
+cat <<EOF | tee ${SETUPDIR}/mod-nova.conf.cinder
+[cinder]
+os_region_name = RegionOne
+EOF
+modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf.cinder
+
+# Finalize installation
+# 1.
+systemctl restart openstack-nova-api.service
+# 2.
 systemctl enable openstack-cinder-api.service openstack-cinder-scheduler.service
 systemctl start openstack-cinder-api.service openstack-cinder-scheduler.service
 

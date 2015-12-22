@@ -99,11 +99,11 @@ for f in ${SETUPDIR}/*.{img,qcow2}; do
 	fi
 
 	glance image-create \
-		--name="${iname}" \
-		--disk-format="${iformat}" \
-		--container-format=bare \
-		--is-public=true \
-	< ${f}
+		--name "${iname}" \
+		--file "${f}" \
+		--disk-format "${iformat}" \
+		--container-format bare \
+		--visibility public --progress
 done
 
 # -------------------------------------------------------------
@@ -131,8 +131,8 @@ nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
 
 # To create the external network
 neutron net-create ${EXTNET_NAME} \
-	--router:external \
-	--provider:physical_network external \
+	--shared --router:external \
+	--provider:physical_network public \
 	--provider:network_type flat
 
 # To create a subnet on the external network

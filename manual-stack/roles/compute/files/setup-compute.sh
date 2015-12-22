@@ -111,7 +111,13 @@ password = ${NOVA_PASS}
 my_ip = ${MANAGEMENT_IP_ADDR}
 ...
 [DEFAULT]
-vnc_enabled = True
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+...
+[vnc]
+enabled = True
 vncserver_listen = 0.0.0.0
 vncserver_proxyclient_address = ${MANAGEMENT_IP_ADDR}
 novncproxy_base_url = http://${CONTROLLER_IP_ADDR}:6080/vnc_auto.html
@@ -121,9 +127,6 @@ host = ${CONTROLLER_HOSTNAME}
 ...
 [oslo_concurrency]
 lock_path = /var/lib/nova/tmp
-...
-[osapi_v3]
-enabled = True
 EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-comp-nova.conf
 
@@ -156,18 +159,11 @@ fi
 #
 # To configure prerequisites
 #
-cat <<EOF >> /etc/sysctl.conf
-net.ipv4.conf.all.rp_filter=0
-net.ipv4.conf.default.rp_filter=0
-net.bridge.bridge-nf-call-iptables=1
-net.bridge.bridge-nf-call-ip6tables=1
-EOF
-sysctl -p
 
 #
 # To install the Networking components
 #
-yum install -q -y openstack-neutron openstack-neutron-ml2 openstack-neutron-openvswitch || exit 1
+yum install -q -y openstack-neutron openstack-neutron-openvswitch ebtables ipset || exit 1
 
 #
 # To configure the Networking common components
@@ -192,61 +188,52 @@ project_name = service
 username = neutron
 password = ${NEUTRON_PASS}
 ...
-[DEFAULT]
-core_plugin = ml2
-service_plugins = router
-allow_overlapping_ips = True
+[oslo_concurrency]
+lock_path = /var/lib/neutron/tmp
 EOF
 modify_inifile /etc/neutron/neutron.conf ${SETUPDIR}/mod-comp-neutron.conf
 
-#
-# To configure the Modular Layer 2 (ML2) plug-in
-#
-cat <<EOF | tee ${SETUPDIR}/mod-comp-ml2_conf.ini
-[ml2]
-type_drivers = flat,vlan,gre,vxlan
-tenant_network_types = gre
-mechanism_drivers = openvswitch
+# Networking Option 2: Self-service networks
+
+# Configure the Linux bridge agent
+cat <<EOF | tee ${SETUPDIR}/mod-comp-ml2-openvswitch_agent.ini.neutron
+[ovs]
+integration_bridge = br-int
+tunnel_bridge = br-tun
+local_ip = ${COMPUTE_INTERNAL_IF_IP}
+enable_tunneling=True
 ...
-[ml2_type_gre]
-tunnel_id_ranges = 1:1000
+[agent]
+polling_interval = 2
+tunnel_types =vxlan
+vxlan_udp_port =4789
+l2_population = False
+arp_responder = False
+prevent_arp_spoofing = True
+enable_distributed_routing = False
+drop_flows_on_start=False
 ...
 [securitygroup]
 enable_security_group = True
-enable_ipset = True
 firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
 ...
-[ovs]
-local_ip = ${COMPUTE_INTERNAL_IF_IP}
-...
-[agent]
-tunnel_types = gre
 EOF
-modify_inifile /etc/neutron/plugins/ml2/ml2_conf.ini ${SETUPDIR}/mod-comp-ml2_conf.ini
-
-#
-# To configure the Open vSwitch (OVS) service
-#
-systemctl enable openvswitch.service
-systemctl start openvswitch.service
+modify_inifile /etc/neutron/plugins/ml2/openvswitch_agent.ini ${SETUPDIR}/mod-comp-ml2-openvswitch_agent.ini.neutron
 
 #
 # To configure Compute to use Networking
 #
 cat <<EOF | tee ${SETUPDIR}/mod-comp-nova.conf.neutron
-[DEFAULT]
-network_api_class = nova.network.neutronv2.api.API
-security_group_api = neutron
-linuxnet_interface_driver = nova.network.linux_net.LinuxOVSInterfaceDriver
-firewall_driver = nova.virt.firewall.NoopFirewallDriver
-...
 [neutron]
 url = http://${CONTROLLER_HOSTNAME}:9696
-auth_strategy = keystone
-admin_auth_url = http://${CONTROLLER_HOSTNAME}:35357/v2.0
-admin_tenant_name = service
-admin_username = neutron
-admin_password = ${NEUTRON_PASS}
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+region_name = RegionOne
+project_name = service
+username = neutron
+password = ${NEUTRON_PASS}
 EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-comp-nova.conf.neutron
 
@@ -255,16 +242,11 @@ modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-comp-nova.conf.neutron
 #
 # 1.
 ln -s /etc/neutron/plugins/ml2/ml2_conf.ini /etc/neutron/plugin.ini
-#
-cp /usr/lib/systemd/system/neutron-openvswitch-agent.service \
-  /usr/lib/systemd/system/neutron-openvswitch-agent.service.orig
-sed -i 's,plugins/openvswitch/ovs_neutron_plugin.ini,plugin.ini,g' \
-  /usr/lib/systemd/system/neutron-openvswitch-agent.service
 # 2.
 systemctl restart openstack-nova-compute.service
 # 3.
-systemctl enable neutron-openvswitch-agent.service
-systemctl start neutron-openvswitch-agent.service
+systemctl enable openvswitch.service neutron-openvswitch-agent.service
+systemctl start openvswitch.service neutron-openvswitch-agent.service
 
 # -------------------------------------------------------------
 #
@@ -277,9 +259,6 @@ systemctl start neutron-openvswitch-agent.service
 yum install -q -y openstack-ceilometer-compute python-ceilometerclient python-pecan || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-comp-ceilometer.conf
-[publisher]
-telemetry_secret = ${CEILOMETER_SHARED_SECRET}
-...
 [DEFAULT]
 rpc_backend = rabbit
 [oslo_messaging_rabbit]
@@ -287,12 +266,17 @@ rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
 ...
+[DEFAULT]
+auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = ceilometer
-admin_password = ${CEILOMETER_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = ceilometer
+password = ${CEILOMETER_PASS}
 ...
 [service_credentials]
 os_auth_url = http://${CONTROLLER_HOSTNAME}:5000/v2.0

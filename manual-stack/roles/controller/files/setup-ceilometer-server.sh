@@ -105,9 +105,10 @@ db.createUser({user: \"ceilometer\",
 
 service_create ${SETUPDIR}/service-def-ceilometer.sh
 
-yum install -q -y openstack-ceilometer-api openstack-ceilometer-collector \
-  openstack-ceilometer-notification openstack-ceilometer-central \
-  openstack-ceilometer-alarm python-ceilometerclient || exit 1
+yum install -q -y openstack-ceilometer-api \
+  openstack-ceilometer-collector openstack-ceilometer-notification \
+  openstack-ceilometer-central openstack-ceilometer-alarm \
+  python-ceilometerclient || exit 1
 
 cat <<EOF | tee ${SETUPDIR}/mod-ceilometer.conf
 [database]
@@ -123,22 +124,22 @@ rabbit_password = ${RABBIT_PASS}
 [DEFAULT]
 auth_strategy = keystone
 [keystone_authtoken]
-auth_uri = http://${CONTROLLER_HOSTNAME}:5000/v2.0
-identity_uri = http://${CONTROLLER_HOSTNAME}:35357
-admin_tenant_name = service
-admin_user = ceilometer
-admin_password = ${CEILOMETER_PASS}
+auth_uri = http://${CONTROLLER_HOSTNAME}:5000
+auth_url = http://${CONTROLLER_HOSTNAME}:35357
+auth_plugin = password
+project_domain_id = default
+user_domain_id = default
+project_name = service
+username = ceilometer
+password = ${CEILOMETER_PASS}
 ...
 [service_credentials]
 os_auth_url = http://${CONTROLLER_HOSTNAME}:5000/v2.0
 os_username = ceilometer
 os_tenant_name = service
-os_endpoint_type = internalURL
 os_password = ${CEILOMETER_PASS}
+os_endpoint_type = internalURL
 os_region_name = RegionOne
-...
-[publisher]
-telemetry_secret = ${CEILOMETER_SHARED_SECRET}
 ...
 [DEFAULT]
 log_dir = /var/log/ceilometer
@@ -163,6 +164,7 @@ cat <<EOF | tee ${SETUPDIR}/mod-glance.conf.ceilometer
 [DEFAULT]
 notification_driver = messagingv2
 rpc_backend = rabbit
+[oslo_messaging_rabbit]
 rabbit_host = ${CONTROLLER_HOSTNAME}
 rabbit_userid = openstack
 rabbit_password = ${RABBIT_PASS}
@@ -173,7 +175,6 @@ systemctl restart openstack-glance-api.service openstack-glance-registry.service
 # Cinder
 cat <<EOF | tee ${SETUPDIR}/mod-cinder.conf.ceilometer
 [DEFAULT]
-control_exchange = cinder
 notification_driver = messagingv2
 EOF
 modify_inifile /etc/cinder/cinder.conf ${SETUPDIR}/mod-cinder.conf.ceilometer

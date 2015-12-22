@@ -108,6 +108,12 @@ password = ${NOVA_PASS}
 my_ip = ${CONTROLLER_IP_ADDR}
 ...
 [DEFAULT]
+network_api_class = nova.network.neutronv2.api.API
+security_group_api = neutron
+linuxnet_interface_driver = nova.network.linux_net.NeutronLinuxBridgeInterfaceDriver
+firewall_driver = nova.virt.firewall.NoopFirewallDriver
+...
+[DEFAULT]
 vncserver_listen = ${CONTROLLER_IP_ADDR}
 vncserver_proxyclient_address = ${CONTROLLER_IP_ADDR}
 ...
@@ -117,8 +123,8 @@ host = ${CONTROLLER_HOSTNAME}
 [oslo_concurrency]
 lock_path = /var/lib/nova/tmp
 ...
-[osapi_v3]
-enabled = True
+[DEFAULT]
+enabled_apis=osapi_compute,metadata
 EOF
 modify_inifile /etc/nova/nova.conf ${SETUPDIR}/mod-nova.conf
 

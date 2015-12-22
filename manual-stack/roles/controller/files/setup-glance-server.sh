@@ -73,7 +73,7 @@ fi
 create_database glance ${GLANCE_DBPASS}
 service_create ${SETUPDIR}/service-def-glance.sh
 
-yum install -q -y openstack-glance python-glanceclient || exit 1
+yum install -q -y openstack-glance python-glance python-glanceclient || exit 1
 cat <<EOF | tee ${SETUPDIR}/mod-glance.conf
 [database]
 connection = mysql://glance:${GLANCE_DBPASS}@${CONTROLLER_HOSTNAME}/glance
